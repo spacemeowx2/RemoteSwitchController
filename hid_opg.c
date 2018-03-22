@@ -177,7 +177,6 @@ static int get_descriptor(
           string_desc_lang.bLength);
       return string_desc_lang.bLength;
     case USB_DT_HID_REPORT:
-      opg_update_report();
       memcpy(data->ep0_request->buf, opg_hid_report, sizeof(opg_hid_report));
       return sizeof(opg_hid_report);
     default:
@@ -210,6 +209,7 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
 
   opg_update_report();
   memcpy(r->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+  r->length = sizeof(switch_controller.bytes);
 
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
   if (result < 0)

@@ -49,17 +49,17 @@ struct opg_config_descriptor {
   struct usb_config_descriptor config;
   struct usb_interface_descriptor interface;
   struct usb_hid_descriptor hid;
-  struct usb_short_endpoint_descriptor ep_in;
   struct usb_short_endpoint_descriptor ep_out;
+  struct usb_short_endpoint_descriptor ep_in;
 } __attribute__ ((packed)) opg_config_desc = {
   .config = {
     .bLength             = USB_DT_CONFIG_SIZE,
     .bDescriptorType     = USB_DT_CONFIG,
-    .wTotalLength        = cpu_to_le16(sizeof(struct opg_config_descriptor)),
+    .wTotalLength        = cpu_to_le16(sizeof(struct opg_config_descriptor)), // it's zero
     .bNumInterfaces      = 1,
     .bConfigurationValue = 1,
     .iConfiguration      = IDX_NULL,
-    .bmAttributes        = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
+    .bmAttributes        = USB_CONFIG_ATT_ONE,
     .bMaxPower           = 250,  // x 2mA
   },
   .interface = {
@@ -82,19 +82,19 @@ struct opg_config_descriptor {
     .bReportType         = USB_DT_HID_REPORT,
     .wReportLength       = cpu_to_le16(sizeof(opg_hid_report)),
   },
-  .ep_in = {
-    .bLength             = USB_DT_ENDPOINT_SIZE,
-    .bDescriptorType     = USB_DT_ENDPOINT,
-    .bEndpointAddress    = USB_DIR_IN | 4,  // will be overriden
-    .bmAttributes        =
-      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
-    .wMaxPacketSize      = 8,
-    .bInterval           = 5,
-  },
   .ep_out = {
     .bLength             = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_OUT | 3,  // will be overriden
+    .bmAttributes        =
+      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+    .wMaxPacketSize      = 64,
+    .bInterval           = 5,
+  },
+  .ep_in = {
+    .bLength             = USB_DT_ENDPOINT_SIZE,
+    .bDescriptorType     = USB_DT_ENDPOINT,
+    .bEndpointAddress    = USB_DIR_IN | 4,  // will be overriden
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
