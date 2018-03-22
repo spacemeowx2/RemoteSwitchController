@@ -44,8 +44,6 @@ struct driver_data {
   struct usb_request* ep_out_request;
 };
 
-#include "hid_opg_gpio.h"
-
 #include "hid_opg_ps4.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
@@ -207,7 +205,7 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
   }
 
   opg_update_report();
-  memcpy(r->buf, opg_report, sizeof(opg_report));
+  memcpy(r->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
 
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
   if (result < 0)
@@ -263,8 +261,8 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
       case HID_REQ_GET_REPORT:
         printk("HID_REQ_GET_REPORT\n");
         opg_update_report();
-        memcpy(data->ep0_request->buf, opg_report, sizeof(opg_report));
-        value = sizeof(opg_report);
+        memcpy(data->ep0_request->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+        value = sizeof(switch_controller.bytes);
         break;
       case HID_REQ_SET_REPORT:
       case HID_REQ_SET_IDLE:
