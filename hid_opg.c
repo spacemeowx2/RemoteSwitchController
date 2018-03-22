@@ -3,6 +3,7 @@
 #include <linux/module.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/kthread.h>
 
 enum {
   IDX_NULL,
@@ -406,13 +407,21 @@ static struct usb_gadget_driver driver = {
   .driver = { .owner = THIS_MODULE },
 };
 
+struct task_struct* recv_task;
+static int recv_func(void *unused)
+{
+  return 0;
+}
+
 static int __init init(void) {
   driver.function = opg_driver_name;
+  recv_task = kthread_run(recv_func, NULL, "recv_task");
   return usb_gadget_probe_driver(&driver);
 }
 module_init(init);
 
 static void __exit cleanup(void) {
+  kthread_stop(recv_task);
   usb_gadget_unregister_driver(&driver);
 }
 module_exit(cleanup);
