@@ -88,7 +88,7 @@ struct opg_config_descriptor {
     .bEndpointAddress    = USB_DIR_IN | 4,  // will be overriden
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
-    .wMaxPacketSize      = 64,
+    .wMaxPacketSize      = 8,
     .bInterval           = 5,
   },
   .ep_out = {
