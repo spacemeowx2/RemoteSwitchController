@@ -194,6 +194,7 @@ static int opg_setup(
   struct driver_data* data = get_gadget_data(gadget);
   int type = r->bRequestType & USB_TYPE_MASK;
   if (type == USB_TYPE_CLASS && r->bRequest == HID_REQ_GET_REPORT) {
+    printk("opg_setup");
     switch(le16_to_cpu(r->wValue)) {
       case 0x0303:
         memcpy(data->ep0_request->buf, report0303, sizeof(report0303));

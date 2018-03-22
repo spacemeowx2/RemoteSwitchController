@@ -197,8 +197,12 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
 }
 
 static void report_complete(struct usb_ep* ep, struct usb_request* r) {
+  static int c = 0;
   int result;
-
+  c++;
+  if (c % 100 == 0) {
+    printk("report_complete %d\n", c);
+  }
   if (r->status) {
     printk("%s: failed to send a report, suspending\n", opg_driver_name);
     return;
@@ -379,6 +383,10 @@ static void unbind(struct usb_gadget* gadget) {
 }
 
 static void disconnect(struct usb_gadget* gadget) {
+  struct driver_data* data = get_gadget_data(gadget);
+  if (!data)
+    return;
+
   printk("%s: disconnect\n", opg_driver_name);
   // TODO: finalize endpoints for interrupt in/out.
 }
