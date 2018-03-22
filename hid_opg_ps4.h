@@ -3,6 +3,7 @@ static char opg_driver_name[] = "OPiPad Gadget HID Driver for PS4";
 #define OPG_VENDOR_ID 0x0f0d
 #define OPG_PRODUCT_ID 0x00c1
 
+static struct usb_gadget* usb_running = 0;
 static char opg_hid_report[] = {
   0x05, 0x01, /* USAGE_PAGE (Generic Desktop)         */
   0x09, 0x05, /* USAGE (Gamepad)                      */
@@ -104,7 +105,7 @@ struct opg_config_descriptor {
     .bNumInterfaces      = 1,
     .bConfigurationValue = 1,
     .iConfiguration      = IDX_NULL,
-    .bmAttributes        = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
+    .bmAttributes        = USB_CONFIG_ATT_ONE,
     .bMaxPower           = 250,  // x 2mA
   },
   .interface = {
@@ -131,7 +132,7 @@ struct opg_config_descriptor {
     .bLength             = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_IN | 4,  // will be overriden
-    .bmAttributes        =
+    .bmAttributes        = 
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 5,
@@ -189,7 +190,6 @@ static int opg_setup(
     struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
   int type = r->bRequestType & USB_TYPE_MASK;
-  printk("opg_setup %d %d %d\n", le16_to_cpu(r->wValue), type, r->bRequest);
   if (type == USB_TYPE_CLASS && r->bRequest == HID_REQ_GET_REPORT) {
     switch(le16_to_cpu(r->wValue)) {
       case 0x0303:
@@ -207,5 +207,6 @@ static int opg_setup(
         break;
     }
   }
+  printk("opg_setup not process\n");
   return -EOPNOTSUPP;
 }

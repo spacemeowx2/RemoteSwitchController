@@ -3,6 +3,9 @@
 #include <linux/module.h>
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
+#include <linux/kthread.h>
+#include <linux/sched.h>
+#include <linux/delay.h>
 
 enum {
   IDX_NULL,
@@ -43,6 +46,7 @@ struct driver_data {
   struct usb_ep* ep_out;
   struct usb_request* ep_out_request;
 };
+static struct task_struct *send_task;
 
 #include "hid_opg_ps4.h"
 
@@ -230,6 +234,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         value = get_descriptor(gadget, r);
         break;
       case USB_REQ_SET_CONFIGURATION:
+        value = w_length;
         if (data->ep_in && !data->ep_in_request) {
           data->ep_in_request = usb_ep_alloc_request(data->ep_in, GFP_KERNEL);
           if (data->ep_in_request) {
@@ -249,9 +254,28 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
             printk("%s: failed to setup endpoints\n", opg_driver_name);
             value = -ENOMEM;
           }
-        } else {
-          value = w_length;
         }
+        if (data->ep_out && !data->ep_out_request) {
+          data->ep_out_request = usb_ep_alloc_request(data->ep_out, GFP_KERNEL);
+          if (data->ep_out_request) {
+            data->ep_out_request->buf =
+              kmalloc(data->ep_out->desc->wMaxPacketSize, GFP_KERNEL);
+            if (data->ep_out_request->buf)
+              usb_ep_enable(data->ep_out);
+          }
+          if (data->ep_out_request && data->ep_out_request->buf) {
+            data->ep_out_request->status = 0;
+            data->ep_out_request->zero = 0;
+            data->ep_out_request->complete = report_complete;
+            data->ep_out_request->length = data->ep_in->desc->wMaxPacketSize;
+            value = w_length;
+          } else {
+            printk("%s: failed to setup endpoints out\n", opg_driver_name);
+            value = -ENOMEM;
+          }
+        }
+        usb_running = gadget;
+        wake_up_process(send_task);
         break;
       default:
         printk("%s: standard setup not impl: %02x-%02x\n",
@@ -264,6 +288,8 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         value = sizeof(switch_controller.bytes);
         break;
       case HID_REQ_SET_REPORT:
+        value = w_length;
+        break;
       case HID_REQ_SET_IDLE:
         value = w_length;
         break;
@@ -348,6 +374,7 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
 
 static void unbind(struct usb_gadget* gadget) {
   struct driver_data* data = get_gadget_data(gadget);
+  usb_running = NULL;
   if (!data)
     return;
 
@@ -398,13 +425,40 @@ static struct usb_gadget_driver driver = {
   .driver = { .owner = THIS_MODULE },
 };
 
+int send_thread(void *unused) {
+  static int c = 0;
+  int result;
+
+  if(usb_running) {
+    struct driver_data* data = get_gadget_data(usb_running);
+    while (1) {
+      if(kthread_should_stop()) break;
+        c++;
+        if (c % 10 == 0) {
+          printk("send_thread %d\n", c);
+          opg_update_report();
+          
+          memcpy(data->ep_out_request->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+          result = usb_ep_queue(data->ep_out, data->ep_out_request, GFP_ATOMIC);
+          if (result < 0)
+            printk("%s: failed to queue a report\n", opg_driver_name);
+        }
+      msleep(1);
+    }
+  }
+  return 0;
+}
+
 static int __init init(void) {
+  usb_running = NULL;
+  send_task = kthread_create(send_thread, NULL, "send_task");
   driver.function = opg_driver_name;
   return usb_gadget_probe_driver(&driver);
 }
 module_init(init);
 
 static void __exit cleanup(void) {
+  kthread_stop(send_task);
   usb_gadget_unregister_driver(&driver);
 }
 module_exit(cleanup);
