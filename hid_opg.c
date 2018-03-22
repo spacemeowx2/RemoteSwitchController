@@ -62,7 +62,7 @@ struct usb_device_descriptor device_desc = {
   .bMaxPacketSize0    = 64,
   .idVendor           = cpu_to_le16(OPG_VENDOR_ID),
   .idProduct          = cpu_to_le16(OPG_PRODUCT_ID),
-  .bcdDevice          = cpu_to_le16(0x0100),
+  .bcdDevice          = cpu_to_le16(0x0572),
   .iManufacturer      = IDX_MANUFACTURER,
   .iProduct           = IDX_PRODUCT,
   .iSerialNumber      = IDX_NULL,
@@ -261,6 +261,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         break;
     } else if (type == USB_TYPE_CLASS) switch (r->bRequest) {
       case HID_REQ_GET_REPORT:
+        printk("HID_REQ_GET_REPORT\n");
         opg_update_report();
         memcpy(data->ep0_request->buf, opg_report, sizeof(opg_report));
         value = sizeof(opg_report);
@@ -310,7 +311,7 @@ struct usb_ep* find_int_ep(struct usb_gadget* gadget, int maxpacket, int in) {
   return NULL;
 }
 
-static int bind(struct usb_gadget* gadget) {
+static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
   struct driver_data* data = kzalloc(sizeof(struct driver_data), GFP_KERNEL);
   if (!data)
     return -ENOMEM;
@@ -391,6 +392,7 @@ static void not_impl(struct usb_gadget* gadget) {
 static struct usb_gadget_driver driver = {
   .function   = "USB Gadget Test Driver",
   .max_speed  = USB_SPEED_HIGH,
+  .bind       = bind,
   .unbind     = unbind,
   .setup      = setup,
   .disconnect = disconnect,
@@ -401,7 +403,7 @@ static struct usb_gadget_driver driver = {
 
 static int __init init(void) {
   driver.function = opg_driver_name;
-  return usb_gadget_probe_driver(&driver, bind);
+  return usb_gadget_probe_driver(&driver);
 }
 module_init(init);
 

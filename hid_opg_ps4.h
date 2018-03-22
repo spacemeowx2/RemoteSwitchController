@@ -1,7 +1,7 @@
-static char opg_driver_name[] = "OPiPad Gadget HID Driver for PS4";
+static char opg_driver_name[] = "Gadget HID Driver for Nintendo Switch";
 
-#define OPG_VENDOR_ID 0x6666
-#define OPG_PRODUCT_ID 0x0884
+#define OPG_VENDOR_ID 0x0f0d
+#define OPG_PRODUCT_ID 0x00c1
 
 static char opg_hid_report[] = {
   0x05, 0x01,  // usage page (desktop)
@@ -181,9 +181,9 @@ static const char report03f3[] =
 static const char* opg_get_string(int idx) {
   switch (idx) {
     case IDX_MANUFACTURER:
-      return "TOYOSHIMA-HOUSE";
+      return "HORI CO.,LTD.";
     case IDX_PRODUCT:
-      return "OPiPad PS4 Adaptor";
+      return "HORIPAD S";
     default:
       break;
   }
