@@ -226,7 +226,6 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   data->ep0_request->length = 0;
   data->ep0_request->status = 0;
 
-  value = opg_setup(gadget, r);
   if (value == -EOPNOTSUPP) {
     int type = r->bRequestType & USB_TYPE_MASK;
     if (type == USB_TYPE_STANDARD) switch (r->bRequest) {

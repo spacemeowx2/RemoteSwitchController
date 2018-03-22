@@ -177,39 +177,12 @@ static const char* opg_get_string(int idx) {
 }
 
 static void opg_update_report(void) {
-  static int fuck = 0;
   int i;
   for (i=0; i < sizeof(switch_controller.bytes); i++) {
     switch_controller.bytes[i] = 0;
   }
-
-  switch_controller.data.A = 1;
-  switch_controller.data.B = 1;
-  switch_controller.data.X = fuck;
-  fuck = !fuck;
-}
-
-static int opg_setup(
-    struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
-  struct driver_data* data = get_gadget_data(gadget);
-  int type = r->bRequestType & USB_TYPE_MASK;
-  if (type == USB_TYPE_CLASS && r->bRequest == HID_REQ_GET_REPORT) {
-    printk("opg_setup");
-    switch(le16_to_cpu(r->wValue)) {
-      case 0x0303:
-        memcpy(data->ep0_request->buf, report0303, sizeof(report0303));
-        return sizeof(report0303);
-      case 0x03f2:
-        opg_update_report();
-        memcpy(data->ep0_request->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
-        return sizeof(switch_controller.bytes);
-      case 0x03f3:
-        memcpy(data->ep0_request->buf, report03f3, sizeof(report03f3));
-        return sizeof(report03f3);
-      default:
-        printk("%s: report page: %04x\n", opg_driver_name, r->wValue);
-        break;
-    }
-  }
-  return -EOPNOTSUPP;
+  switch_controller.data.LX = 128;
+  switch_controller.data.LY = 128;
+  switch_controller.data.RX = 128;
+  switch_controller.data.RY = 128;
 }
