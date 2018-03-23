@@ -4,6 +4,10 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/kthread.h>
+#include<linux/in.h>
+#include<linux/inet.h>
+#include<linux/socket.h>
+#include<net/sock.h>
 
 enum {
   IDX_NULL,
@@ -410,6 +414,79 @@ static struct usb_gadget_driver driver = {
 struct task_struct* recv_task;
 static int recv_func(void *unused)
 {
+  struct socket *control;
+  struct socket *client_sock;
+  struct sockaddr_in s_addr;
+  unsigned short portnum=0x8888;
+  int ret=0;
+  char *recvbuf = NULL;
+  struct kvec vec;
+  struct msghdr msg;
+
+  memset(&s_addr, 0, sizeof(s_addr));
+  s_addr.sin_family = AF_INET;
+  s_addr.sin_port = htons(portnum);
+  s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  control = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
+  client_sock = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
+
+  /*create a socket*/
+  ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, &control);
+  if (ret) {
+    printk("server:socket_create error!\n");
+  }
+  printk("server:socket_create ok!\n");
+
+  /*bind the socket*/
+  ret = control->ops->bind(control, (struct sockaddr *)&s_addr, sizeof(s_addr));
+  if (ret < 0) {
+    printk("server: bind error\n");
+    return ret;
+  }
+  printk("server:bind ok!\n");
+
+  /*listen*/
+  ret = control->ops->listen(control, 1);
+  if (ret < 0) {
+    printk("server: listen error\n");
+    return ret;
+  }
+  printk("server:listen ok!\n");
+
+  ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, &client_sock);
+  if (ret) {
+    printk("server:socket_create error!\n");
+  }
+  printk("server:socket_create ok!\n");
+
+  ret = client_sock->ops->accept(control, client_sock, 0);
+  if (ret < 0) {
+    printk("server:accept error!\n");
+    return ret;
+  }
+
+  printk("server: accept ok, Connection Established\n");
+
+  /*kmalloc a receive buffer*/
+  recvbuf = kmalloc(10, GFP_KERNEL);
+  if (recvbuf == NULL) {
+    printk("server: recvbuf kmalloc error!\n");
+    return -1;
+  }
+  memset(recvbuf, 0, 10);
+
+  /*receive message from client*/
+  memset(&vec, 0, sizeof(vec));
+  memset(&msg, 0, sizeof(msg));
+  vec.iov_base = recvbuf;
+  vec.iov_len = 10;
+  ret = kernel_recvmsg(client_sock, &msg, &vec, 1, 10, 0); /*receive message*/
+  printk("receive message:\n %s\n",recvbuf);
+
+  /*release socket*/
+  sock_release(client_sock);
+  sock_release(control);
   return 0;
 }
 
