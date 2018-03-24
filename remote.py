@@ -3,6 +3,7 @@ from math import cos, sin
 from time import sleep
 from PIL import Image
 TIME_BUTTON = 0.05
+addr = ('192.168.233.135', 34952)
 
 def ary2byte(a):
     o = 0
@@ -67,7 +68,7 @@ class SwitchController:
                chr(int(self.RX) & 0xFF) + chr(int(self.RY) & 0xFF) + \
                chr(0)
 class Cursor:
-    def __init__(self, sock, drawer):
+    def __init__(self, drawer):
         self.drawer = drawer
         self.x = 0
         self.y = 0
@@ -76,17 +77,17 @@ class Cursor:
         dy = y - self.y
         while dx != 0:
             if dx > 0:
-                self.drawer.goLeft()
+                self.drawer.goRight()
                 dx -= 1
             else:
-                self.drawer.goRight()
+                self.drawer.goLeft()
                 dx += 1
         while dy != 0:
             if dy > 0:
-                self.drawer.goUp()
+                self.drawer.goDown()
                 dy -= 1
             else:
-                self.drawer.goDown()
+                self.drawer.goUp()
                 dy += 1
         self.x = x
         self.y = y
@@ -155,12 +156,12 @@ class AutoDrawer:
     def drawv2(self, filename):
         img = self.getImage(filename)
         visited = [[False for j in range(320)] for i in range(120)]
-        print 'going to left top'
-        self.go0()
-        c = Cursor()
-        for x, y, c in DrawPathSV(img)
+        # print 'going to left top'
+        # self.go0()
+        cur = Cursor(self)
+        for x, y, c in DrawPathSV(img):
             print 'go', x, y
-            c.go(x, y)
+            cur.go(x, y)
             self.A()
     def draw(self, filename):
         img = self.getImage(filename)
@@ -191,11 +192,14 @@ class AutoDrawer:
             cx = 0
     def ctl(self):
         c = self.c
+        c.A = 1
+        self.send(TIME_BUTTON)
+        sleep(2)
         c.ZL = 1
         c.ZR = 1
         self.send(1)
         c.A = 1
-        self.send(1)
+        self.send(TIME_BUTTON)
     def go0(self):
         c = self.c
         c.d_up = 1
@@ -218,7 +222,6 @@ class AutoDrawer:
             self.c.reset()
             self.sock.sendto(str(self.c), self.addr)
         # print 'send done'
-addr = ('192.168.233.135', 34952)
 udpClient = socket(AF_INET, SOCK_DGRAM)
 drawer = AutoDrawer(udpClient, addr)
 drawer.send()
@@ -228,6 +231,8 @@ while True:
     args = args[1:]
     if cmd == 'draw':
         drawer.draw(args[0])
+    if cmd == 'drawv2':
+        drawer.drawv2(args[0])
     if cmd == 'ctl':
         drawer.ctl()
     if cmd == 'w':
