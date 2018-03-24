@@ -51,6 +51,10 @@ struct driver_data {
 
 #include "hid_opg_ps4.h"
 
+
+DEFINE_SEMAPHORE(switch_controller_lock);
+static union SwitchController switch_controller;
+static union SwitchController old_switch_controller;
 MODULE_LICENSE("Dual BSD/GPL");
 
 #define USB_BUFSIZ 1024
@@ -144,6 +148,25 @@ void estimate_ep_caps(const char* name, struct ep_caps* caps) {
   return;
 }
 
+static void update_report(void) {
+  int i;
+  int changed = 0;
+  for (i = 0; i < 1000; i++) {
+    down(switch_controller_lock);
+    if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
+      changed = 1;
+      // changed
+      memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
+    }
+    up(switch_controller_lock);
+    if (changed) {
+      break;
+    } else {
+      schedule_timeout_interruptible(1);
+    }
+  }
+}
+
 static int get_descriptor(
     struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
@@ -212,7 +235,7 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
     return;
   }
 
-  opg_update_report();
+  update_report();
   memcpy(r->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
   r->length = sizeof(switch_controller.bytes);
 
@@ -268,7 +291,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
     } else if (type == USB_TYPE_CLASS) switch (r->bRequest) {
       case HID_REQ_GET_REPORT:
         printk("HID_REQ_GET_REPORT\n");
-        opg_update_report();
+        update_report();
         memcpy(data->ep0_request->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
         value = sizeof(switch_controller.bytes);
         break;
@@ -421,11 +444,14 @@ void msleep(unsigned int msecs)
 }
 static int recv_func(void *unused)
 {
+  // must larger than sizeof(switch_controller)
   const int BUF_LEN = 64;
   struct socket *sock;
   struct sockaddr_in s_addr;
   unsigned short portnum = 0x8888;
   int ret = 0;
+  int opt;
+  struct timeval tv;
   char recvbuf[BUF_LEN];
   struct kvec vec;
   struct msghdr msg;
@@ -445,7 +471,21 @@ static int recv_func(void *unused)
     return -1;
   }
   printk("server:socket_create ok!\n");
-  sock->sk->sk_reuse = 1;
+
+  opt = 1;
+  ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
+  if (ret) {
+    printk("SO_REUSEADDR error %d\n", ret);
+    return ret;
+  }
+
+  tv.tv_sec = 0;
+  tv.tv_usec = 100 * 1000; // 10ms
+  ret = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv));
+  if (ret) {
+    printk("SO_RCVTIMEO error %d\n", ret);
+    return ret;
+  }
 
   /*bind the socket*/
   ret = sock->ops->bind(sock, (struct sockaddr *)&s_addr, sizeof(s_addr));
@@ -464,7 +504,9 @@ static int recv_func(void *unused)
     ret = kernel_recvmsg(sock, &msg, &vec, 1, BUF_LEN, MSG_DONTWAIT); /*receive message*/
     if (ret > 0) {
       printk("receive message [%d]:\n %s\n", ret, recvbuf);
-      memcpy(switch_controller, recvbuf, sizeof(switch_controller));
+      down(switch_controller_lock);
+      memcpy(switch_controller.bytes, recvbuf.bytes, sizeof(switch_controller.bytes));
+      up(switch_controller_lock);
     }
     msleep(1);
   }

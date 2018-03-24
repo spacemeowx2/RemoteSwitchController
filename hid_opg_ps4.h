@@ -147,8 +147,6 @@ union SwitchController {
   uint8_t bytes[8];
 };
 
-static union SwitchController switch_controller;
-
 static const char* opg_get_string(int idx) {
   switch (idx) {
     case IDX_MANUFACTURER:
@@ -159,15 +157,4 @@ static const char* opg_get_string(int idx) {
       break;
   }
   return NULL;
-}
-
-static void opg_update_report(void) {
-  // int i;
-  // for (i=0; i < sizeof(switch_controller.bytes); i++) {
-  //   switch_controller.bytes[i] = 0;
-  // }
-  // switch_controller.data.LX = 128;
-  // switch_controller.data.LY = 128;
-  // switch_controller.data.RX = 128;
-  // switch_controller.data.RY = 128;
 }
