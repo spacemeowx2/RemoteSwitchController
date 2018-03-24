@@ -149,22 +149,24 @@ void estimate_ep_caps(const char* name, struct ep_caps* caps) {
 }
 
 static void update_report(void) {
+  #if 0
   int i;
   int changed = 0;
-  for (i = 0; i < 1000; i++) {
-    down(switch_controller_lock);
+  for (i = 0; i < 100; i++) {
+    down(&switch_controller_lock);
     if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
       changed = 1;
       // changed
       memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
     }
-    up(switch_controller_lock);
+    up(&switch_controller_lock);
     if (changed) {
       break;
     } else {
       schedule_timeout_interruptible(1);
     }
   }
+  #endif
 }
 
 static int get_descriptor(
@@ -455,7 +457,6 @@ static int recv_func(void *unused)
   char recvbuf[BUF_LEN];
   struct kvec vec;
   struct msghdr msg;
-  int c = 0;
 
   memset(&s_addr, 0, sizeof(s_addr));
   s_addr.sin_family = AF_INET;
@@ -479,8 +480,8 @@ static int recv_func(void *unused)
     return ret;
   }
 
-  tv.tv_sec = 0;
-  tv.tv_usec = 100 * 1000; // 10ms
+  tv.tv_sec = 1;
+  tv.tv_usec = 0; // 10 * 1000; // 10ms
   ret = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv));
   if (ret) {
     printk("SO_RCVTIMEO error %d\n", ret);
@@ -501,14 +502,13 @@ static int recv_func(void *unused)
     memset(&msg, 0, sizeof(msg));
     vec.iov_base = recvbuf;
     vec.iov_len = BUF_LEN;
-    ret = kernel_recvmsg(sock, &msg, &vec, 1, BUF_LEN, MSG_DONTWAIT); /*receive message*/
+    ret = kernel_recvmsg(sock, &msg, &vec, 1, BUF_LEN, 0); /*receive message*/
     if (ret > 0) {
       printk("receive message [%d]:\n %s\n", ret, recvbuf);
-      down(switch_controller_lock);
-      memcpy(switch_controller.bytes, recvbuf.bytes, sizeof(switch_controller.bytes));
-      up(switch_controller_lock);
+      down(&switch_controller_lock);
+      memcpy(switch_controller.bytes, recvbuf, sizeof(switch_controller.bytes));
+      up(&switch_controller_lock);
     }
-    msleep(1);
   }
 
   /*release socket*/
