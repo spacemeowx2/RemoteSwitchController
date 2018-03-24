@@ -55,6 +55,8 @@ struct driver_data {
 DEFINE_SEMAPHORE(switch_controller_lock);
 static union SwitchController switch_controller;
 static union SwitchController old_switch_controller;
+static int busy_count = 0;
+const int BUSY_COUNT_START = 1000;
 MODULE_LICENSE("Dual BSD/GPL");
 
 #define USB_BUFSIZ 1024
@@ -149,24 +151,26 @@ void estimate_ep_caps(const char* name, struct ep_caps* caps) {
 }
 
 static void update_report(void) {
-  #if 0
-  int i;
-  int changed = 0;
-  for (i = 0; i < 100; i++) {
+  if (busy_count == 0) {
+    int i;
+    int changed = 0;
+    for (i = 0; i < 100; i++) {
+      down(&switch_controller_lock);
+      if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
+        changed = 1;
+        // changed
+        memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
+      }
+      up(&switch_controller_lock);
+      if (changed) {
+        break;
+      }
+    }
+  } else {
     down(&switch_controller_lock);
-    if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
-      changed = 1;
-      // changed
-      memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
-    }
+    busy_count--;
     up(&switch_controller_lock);
-    if (changed) {
-      break;
-    } else {
-      schedule_timeout_interruptible(1);
-    }
   }
-  #endif
 }
 
 static int get_descriptor(
@@ -507,6 +511,7 @@ static int recv_func(void *unused)
       printk("receive message [%d]:\n %s\n", ret, recvbuf);
       down(&switch_controller_lock);
       memcpy(switch_controller.bytes, recvbuf, sizeof(switch_controller.bytes));
+      busy_count = BUSY_COUNT_START;
       up(&switch_controller_lock);
     }
   }
