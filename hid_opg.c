@@ -150,6 +150,7 @@ void estimate_ep_caps(const char* name, struct ep_caps* caps) {
 }
 
 static void update_report(void) {
+  #if 0
   if (busy_count == 0) {
     int i;
     int changed = 0;
@@ -170,6 +171,7 @@ static void update_report(void) {
     busy_count--;
     spin_unlock(&switch_controller_lock);
   }
+  #endif
 }
 
 static int get_descriptor(
