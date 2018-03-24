@@ -51,8 +51,7 @@ struct driver_data {
 
 #include "hid_opg_ps4.h"
 
-
-DEFINE_SEMAPHORE(switch_controller_lock);
+static DEFINE_SPINLOCK(switch_controller_lock);
 static union SwitchController switch_controller;
 static union SwitchController old_switch_controller;
 static int busy_count = 0;
@@ -155,21 +154,21 @@ static void update_report(void) {
     int i;
     int changed = 0;
     for (i = 0; i < 100; i++) {
-      down(&switch_controller_lock);
+      spin_lock(&switch_controller_lock);
       if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
         changed = 1;
         // changed
         memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
       }
-      up(&switch_controller_lock);
+      spin_unlock(&switch_controller_lock);
       if (changed) {
         break;
       }
     }
   } else {
-    down(&switch_controller_lock);
+    spin_lock(&switch_controller_lock);
     busy_count--;
-    up(&switch_controller_lock);
+    spin_unlock(&switch_controller_lock);
   }
 }
 
@@ -230,12 +229,7 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
 }
 
 static void report_complete(struct usb_ep* ep, struct usb_request* r) {
-  static int c = 0;
   int result;
-  c++;
-  if (c % 100 == 0) {
-    printk("report_complete %d\n", c);
-  }
   if (r->status) {
     printk("%s: failed to send a report, suspending\n", opg_driver_name);
     return;
@@ -508,11 +502,10 @@ static int recv_func(void *unused)
     vec.iov_len = BUF_LEN;
     ret = kernel_recvmsg(sock, &msg, &vec, 1, BUF_LEN, 0); /*receive message*/
     if (ret > 0) {
-      printk("receive message [%d]:\n %s\n", ret, recvbuf);
-      down(&switch_controller_lock);
+      spin_lock(&switch_controller_lock);
       memcpy(switch_controller.bytes, recvbuf, sizeof(switch_controller.bytes));
       busy_count = BUSY_COUNT_START;
-      up(&switch_controller_lock);
+      spin_unlock(&switch_controller_lock);
     }
   }
 

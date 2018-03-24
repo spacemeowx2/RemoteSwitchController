@@ -45,14 +45,15 @@ class SwitchController:
                chr(int(self.LX) & 0xFF) + chr(int(self.LY) & 0xFF) + \
                chr(int(self.RX) & 0xFF) + chr(int(self.RY) & 0xFF) + \
                chr(0)
+
 addr = ('192.168.233.135', 34952)
 udpClient = socket(AF_INET,SOCK_DGRAM)
 c = SwitchController()
 r = 0
 while True:
     sleep(0.01)
-    c.LX = cos(r) * 128
-    c.LY = sin(r) * 128
+    c.LX = cos(r) * 128 + 128
+    c.LY = sin(r) * 128 + 128
     r += 0.01
     udpClient.sendto(str(c), addr)
 
