@@ -412,81 +412,65 @@ static struct usb_gadget_driver driver = {
 };
 
 struct task_struct* recv_task;
+void msleep(unsigned int msecs)
+{
+  unsigned long timeout = msecs_to_jiffies(msecs) + 1;
+
+  while (timeout)
+    timeout = schedule_timeout_interruptible(timeout);
+}
 static int recv_func(void *unused)
 {
-  struct socket *control;
-  struct socket *client_sock;
+  const int BUF_LEN = 64;
+  struct socket *sock;
   struct sockaddr_in s_addr;
-  unsigned short portnum=0x8888;
-  int ret=0;
-  char *recvbuf = NULL;
+  unsigned short portnum = 0x8888;
+  int ret = 0;
+  char recvbuf[BUF_LEN];
   struct kvec vec;
   struct msghdr msg;
+  int c = 0;
 
   memset(&s_addr, 0, sizeof(s_addr));
   s_addr.sin_family = AF_INET;
   s_addr.sin_port = htons(portnum);
   s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-  control = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
-  client_sock = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
+  sock = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
 
   /*create a socket*/
-  ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, &control);
+  ret = sock_create_kern(&init_net, PF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock);
   if (ret) {
     printk("server:socket_create error!\n");
+    return -1;
   }
   printk("server:socket_create ok!\n");
+  sock->sk->sk_reuse = 1;
 
   /*bind the socket*/
-  ret = control->ops->bind(control, (struct sockaddr *)&s_addr, sizeof(s_addr));
+  ret = sock->ops->bind(sock, (struct sockaddr *)&s_addr, sizeof(s_addr));
   if (ret < 0) {
     printk("server: bind error\n");
     return ret;
   }
   printk("server:bind ok!\n");
 
-  /*listen*/
-  ret = control->ops->listen(control, 1);
-  if (ret < 0) {
-    printk("server: listen error\n");
-    return ret;
+  while (!kthread_should_stop()) {
+    memset(recvbuf, 0, BUF_LEN);
+    memset(&vec, 0, sizeof(vec));
+    memset(&msg, 0, sizeof(msg));
+    vec.iov_base = recvbuf;
+    vec.iov_len = BUF_LEN;
+    ret = kernel_recvmsg(sock, &msg, &vec, 1, BUF_LEN, MSG_DONTWAIT); /*receive message*/
+    if (ret > 0) {
+      printk("receive message [%d]:\n %s\n", ret, recvbuf);
+      memcpy(switch_controller, recvbuf, sizeof(switch_controller));
+    }
+    msleep(1);
   }
-  printk("server:listen ok!\n");
-
-  ret = sock_create_kern(&init_net, AF_INET, SOCK_STREAM, IPPROTO_TCP, &client_sock);
-  if (ret) {
-    printk("server:socket_create error!\n");
-  }
-  printk("server:socket_create ok!\n");
-
-  ret = client_sock->ops->accept(control, client_sock, 0);
-  if (ret < 0) {
-    printk("server:accept error!\n");
-    return ret;
-  }
-
-  printk("server: accept ok, Connection Established\n");
-
-  /*kmalloc a receive buffer*/
-  recvbuf = kmalloc(10, GFP_KERNEL);
-  if (recvbuf == NULL) {
-    printk("server: recvbuf kmalloc error!\n");
-    return -1;
-  }
-  memset(recvbuf, 0, 10);
-
-  /*receive message from client*/
-  memset(&vec, 0, sizeof(vec));
-  memset(&msg, 0, sizeof(msg));
-  vec.iov_base = recvbuf;
-  vec.iov_len = 10;
-  ret = kernel_recvmsg(client_sock, &msg, &vec, 1, 10, 0); /*receive message*/
-  printk("receive message:\n %s\n",recvbuf);
 
   /*release socket*/
-  sock_release(client_sock);
-  sock_release(control);
+  sock_release(sock);
   return 0;
 }
 

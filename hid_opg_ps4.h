@@ -149,21 +149,6 @@ union SwitchController {
 
 static union SwitchController switch_controller;
 
-static const char report0303[] =
-{
-  0x03, 0x21, 0x27, 0x04, 0x41, 0x00, 0x2c, 0x56,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x0d, 0x0d, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
-static const char report03f3[] =
-{
-  0xf3, 0x00, 0x38, 0x38, 0x00, 0x00, 0x00, 0x00
-};
-
 static const char* opg_get_string(int idx) {
   switch (idx) {
     case IDX_MANUFACTURER:
@@ -177,12 +162,12 @@ static const char* opg_get_string(int idx) {
 }
 
 static void opg_update_report(void) {
-  int i;
-  for (i=0; i < sizeof(switch_controller.bytes); i++) {
-    switch_controller.bytes[i] = 0;
-  }
-  switch_controller.data.LX = 128;
-  switch_controller.data.LY = 128;
-  switch_controller.data.RX = 128;
-  switch_controller.data.RY = 128;
+  // int i;
+  // for (i=0; i < sizeof(switch_controller.bytes); i++) {
+  //   switch_controller.bytes[i] = 0;
+  // }
+  // switch_controller.data.LX = 128;
+  // switch_controller.data.LY = 128;
+  // switch_controller.data.RX = 128;
+  // switch_controller.data.RY = 128;
 }
