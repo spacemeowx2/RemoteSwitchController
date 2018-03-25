@@ -17,6 +17,8 @@ class SwitchController:
         [5,4,3]
     ]
     def __init__(self):
+        self.l_center = 128
+        self.r_center = 128
         self.reset()
     def reset(self):
         self.Y = 0
@@ -40,10 +42,10 @@ class SwitchController:
         self.d_right = 0
         self.d_left = 0
 
-        self.LX = 128
-        self.LY = 128
-        self.RX = 128
-        self.RY = 128
+        self.LX = self.l_center
+        self.LY = self.l_center
+        self.RX = self.r_center
+        self.RY = self.r_center
     def _dpad2byte(self):
         x = 1
         y = 1
@@ -153,43 +155,19 @@ class AutoDrawer:
                         c = 1.0 * sum(c) / len(c)
                     image[y][x] = 0 if c < 128 else 1
         return image
-    def drawv2(self, filename):
+    def draw(self, filename):
         img = self.getImage(filename)
         visited = [[False for j in range(320)] for i in range(120)]
-        # print 'going to left top'
-        # self.go0()
         cur = Cursor(self)
         for x, y, c in DrawPathSV(img):
             print 'go', x, y
             cur.go(x, y)
             self.A()
-    def draw(self, filename):
-        img = self.getImage(filename)
-        print 'going to left top'
-        self.go0()
-        cx = 0
-
-        i = 0
-        batch = 0
-        print 'start drawing'
-        for y in range(120):
-            for x in range(320):
-                if img[y][x] == 0: # black
-                    print 'move right', batch + 1
-                    for _ in range(batch + 1):
-                        self.goRight()
-                        cx += 1
-                    batch = 0
-                    self.A()
-                    print 'A'
-                else:
-                    batch += 1
-            print 'newline'
-            if cx > 0:
-                self.goLeftB()
-            self.goDown()
-            batch = 0
-            cx = 0
+    def center(self, c):
+        self.c.l_center = int(c)
+        self.c.r_center = int(c)
+        self.c.reset()
+        self.send()
     def ctl(self):
         c = self.c
         c.A = 1
@@ -231,8 +209,8 @@ while True:
     args = args[1:]
     if cmd == 'draw':
         drawer.draw(args[0])
-    if cmd == 'drawv2':
-        drawer.drawv2(args[0])
+    if cmd == 'center':
+        drawer.center(args[0])
     if cmd == 'ctl':
         drawer.ctl()
     if cmd == 'w':
@@ -253,6 +231,12 @@ while True:
     if cmd == 'r':
         drawer.c.R = 1
         drawer.send(TIME_BUTTON)
+    if cmd == 'lc':
+        drawer.c.lclick = 1
+        drawer.send(1)
+    if cmd == 'rc':
+        drawer.c.rclick = 1
+        drawer.send(1)
     if cmd == 'A':
         drawer.c.A = 1
         drawer.send(TIME_BUTTON)
