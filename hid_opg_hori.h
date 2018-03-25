@@ -55,7 +55,7 @@ struct opg_config_descriptor {
   .config = {
     .bLength             = USB_DT_CONFIG_SIZE,
     .bDescriptorType     = USB_DT_CONFIG,
-    .wTotalLength        = cpu_to_le16(sizeof(struct opg_config_descriptor)), // it's zero
+    .wTotalLength        = cpu_to_le16(sizeof(struct opg_config_descriptor)),
     .bNumInterfaces      = 1,
     .bConfigurationValue = 1,
     .iConfiguration      = IDX_NULL,
@@ -123,7 +123,7 @@ union SwitchController {
     unsigned int capture : 1;
     unsigned int : 2; // unused bits
 
-    // byte3
+    // byte3 it should be 0-8 direction not bit enabled
     unsigned int dpad_up : 1;
     unsigned int dpad_down : 1;
     unsigned int dpad_right : 1;

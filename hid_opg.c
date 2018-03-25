@@ -4,10 +4,10 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
 #include <linux/kthread.h>
-#include<linux/in.h>
-#include<linux/inet.h>
-#include<linux/socket.h>
-#include<net/sock.h>
+#include <linux/in.h>
+#include <linux/inet.h>
+#include <linux/socket.h>
+#include <net/sock.h>
 
 enum {
   IDX_NULL,
@@ -42,6 +42,7 @@ struct usb_hid_descriptor {
 struct driver_data {
   u8 last_request_type;
   u8 last_request;
+  struct usb_gadget* gadget;
   struct usb_request* ep0_request;
   struct usb_ep* ep_in;
   struct usb_request* ep_in_request;
@@ -49,13 +50,10 @@ struct driver_data {
   struct usb_request* ep_out_request;
 };
 
-#include "hid_opg_ps4.h"
+#include "hid_opg_hori.h"
 
 static DEFINE_SPINLOCK(switch_controller_lock);
 static union SwitchController switch_controller;
-static union SwitchController old_switch_controller;
-static int busy_count = 0;
-const int BUSY_COUNT_START = 1000;
 MODULE_LICENSE("Dual BSD/GPL");
 
 #define USB_BUFSIZ 1024
@@ -150,28 +148,7 @@ void estimate_ep_caps(const char* name, struct ep_caps* caps) {
 }
 
 static void update_report(void) {
-  #if 0
-  if (busy_count == 0) {
-    int i;
-    int changed = 0;
-    for (i = 0; i < 100; i++) {
-      spin_lock(&switch_controller_lock);
-      if (memcmp(switch_controller.bytes, old_switch_controller.bytes, sizeof(switch_controller.bytes)) != 0) {
-        changed = 1;
-        // changed
-        memcpy(old_switch_controller.bytes, switch_controller.bytes, sizeof(old_switch_controller.bytes));
-      }
-      spin_unlock(&switch_controller_lock);
-      if (changed) {
-        break;
-      }
-    }
-  } else {
-    spin_lock(&switch_controller_lock);
-    busy_count--;
-    spin_unlock(&switch_controller_lock);
-  }
-  #endif
+  // do nothing
 }
 
 static int get_descriptor(
@@ -238,7 +215,9 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
   }
 
   update_report();
+  spin_lock(&switch_controller_lock);
   memcpy(r->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+  spin_unlock(&switch_controller_lock);
   r->length = sizeof(switch_controller.bytes);
 
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
@@ -294,7 +273,9 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
       case HID_REQ_GET_REPORT:
         printk("HID_REQ_GET_REPORT\n");
         update_report();
+        spin_lock(&switch_controller_lock);
         memcpy(data->ep0_request->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+        spin_unlock(&switch_controller_lock);
         value = sizeof(switch_controller.bytes);
         break;
       case HID_REQ_SET_REPORT:
@@ -342,11 +323,35 @@ struct usb_ep* find_int_ep(struct usb_gadget* gadget, int maxpacket, int in) {
   return NULL;
 }
 
-static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
-  struct driver_data* data = kzalloc(sizeof(struct driver_data), GFP_KERNEL);
-  if (!data)
-    return -ENOMEM;
-  set_gadget_data(gadget, data);
+static int do_set_interface(struct driver_data* data) {
+  int rc;
+  struct usb_gadget* gadget = data->gadget;
+
+  if (data->ep_in) {
+    usb_ep_disable(data->ep_in);
+    data->ep_in->driver_data = NULL;
+    data->ep_in->desc = NULL;
+    data->ep_in = NULL;
+  }
+  if (data->ep_in_request) {
+    if (data->ep_in_request->buf)
+      kfree(data->ep_in_request->buf);
+    usb_ep_free_request(data->ep_in, data->ep_in_request);
+    data->ep_in_request = NULL;
+  }
+  if (data->ep_out) {
+    usb_ep_disable(data->ep_out);
+    data->ep_out->driver_data = NULL;
+    data->ep_out->desc = NULL;
+    data->ep_out = NULL;
+  }
+
+  if (data->ep0_request) {
+    if (data->ep0_request->buf)
+      kfree(data->ep0_request->buf);
+    usb_ep_free_request(gadget->ep0, data->ep0_request);
+    data->ep0_request = NULL;
+  }
 
   // Initialize EP0 for setup.
   data->ep0_request = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
@@ -364,6 +369,11 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
     data->ep_in->desc =
       (struct usb_endpoint_descriptor*)&opg_config_desc.ep_in;
     opg_config_desc.ep_in.bEndpointAddress = data->ep_in->address;
+    rc = usb_ep_enable(data->ep_in);
+    if (rc) {
+      printk("%s: failed to enable %s, result %d\n", opg_driver_name, data->ep_in->name, rc);
+      return -EOPNOTSUPP;
+    }
   } else {
     printk("%s: failed to allocate ep-in\n", opg_driver_name);
     return -EOPNOTSUPP;
@@ -374,8 +384,29 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
     data->ep_out->desc =
       (struct usb_endpoint_descriptor*)&opg_config_desc.ep_out;
     opg_config_desc.ep_out.bEndpointAddress = data->ep_out->address;
+    rc = usb_ep_enable(data->ep_out);
+    if (rc) {
+      printk("%s: failed to enable %s, result %d\n", opg_driver_name, data->ep_out->name, rc);
+    }
   } else {
     printk("%s: failed to allocate ep-out, ignoring\n", opg_driver_name);
+  }
+  return 0;
+}
+
+static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
+  int rc;
+  struct driver_data* data = kzalloc(sizeof(struct driver_data), GFP_KERNEL);
+  if (!data)
+    return -ENOMEM;
+  data->gadget = gadget;
+
+  set_gadget_data(gadget, data);
+
+  rc = do_set_interface(data);
+  if (rc) {
+    printk("%s: failed at do_set_interface %d\n", opg_driver_name, rc);
+    return rc;
   }
   return 0;
 }
@@ -412,11 +443,17 @@ static void unbind(struct usb_gadget* gadget) {
 }
 
 static void disconnect(struct usb_gadget* gadget) {
+  int rc;
   struct driver_data* data = get_gadget_data(gadget);
   if (!data)
     return;
 
   printk("%s: disconnect\n", opg_driver_name);
+
+  rc = do_set_interface(data);
+  if (rc) {
+    printk("%s: failed at do_set_interface %d\n", opg_driver_name, rc);
+  }
   // TODO: finalize endpoints for interrupt in/out.
 }
 
@@ -437,13 +474,6 @@ static struct usb_gadget_driver driver = {
 };
 
 struct task_struct* recv_task;
-void msleep(unsigned int msecs)
-{
-  unsigned long timeout = msecs_to_jiffies(msecs) + 1;
-
-  while (timeout)
-    timeout = schedule_timeout_interruptible(timeout);
-}
 static int recv_func(void *unused)
 {
   // must larger than sizeof(switch_controller)
@@ -506,13 +536,13 @@ static int recv_func(void *unused)
     if (ret > 0) {
       spin_lock(&switch_controller_lock);
       memcpy(switch_controller.bytes, recvbuf, sizeof(switch_controller.bytes));
-      busy_count = BUSY_COUNT_START;
       spin_unlock(&switch_controller_lock);
     }
   }
 
   /*release socket*/
   sock_release(sock);
+  kfree(sock);
   return 0;
 }
 
