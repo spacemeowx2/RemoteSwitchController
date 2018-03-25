@@ -324,20 +324,19 @@ struct usb_ep* find_int_ep(struct usb_gadget* gadget, int maxpacket, int in) {
 }
 
 static int do_set_interface(struct driver_data* data) {
-  int rc;
   struct usb_gadget* gadget = data->gadget;
 
-  if (data->ep_in) {
-    usb_ep_disable(data->ep_in);
-    data->ep_in->driver_data = NULL;
-    data->ep_in->desc = NULL;
-    data->ep_in = NULL;
-  }
   if (data->ep_in_request) {
     if (data->ep_in_request->buf)
       kfree(data->ep_in_request->buf);
     usb_ep_free_request(data->ep_in, data->ep_in_request);
     data->ep_in_request = NULL;
+  }
+  if (data->ep_in) {
+    usb_ep_disable(data->ep_in);
+    data->ep_in->driver_data = NULL;
+    data->ep_in->desc = NULL;
+    data->ep_in = NULL;
   }
   if (data->ep_out) {
     usb_ep_disable(data->ep_out);
@@ -346,22 +345,6 @@ static int do_set_interface(struct driver_data* data) {
     data->ep_out = NULL;
   }
 
-  if (data->ep0_request) {
-    if (data->ep0_request->buf)
-      kfree(data->ep0_request->buf);
-    usb_ep_free_request(gadget->ep0, data->ep0_request);
-    data->ep0_request = NULL;
-  }
-
-  // Initialize EP0 for setup.
-  data->ep0_request = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
-  if (!data->ep0_request)
-    return -ENOMEM;
-  data->ep0_request->buf = kmalloc(USB_BUFSIZ, GFP_KERNEL);
-  if (!data->ep0_request->buf)
-    return -ENOMEM;
-  gadget->ep0->driver_data = data;
-
   // Claim endpoints for interrupt transfer.
   data->ep_in = find_int_ep(gadget, opg_config_desc.ep_in.wMaxPacketSize, 1);
   if (data->ep_in) {
@@ -369,11 +352,6 @@ static int do_set_interface(struct driver_data* data) {
     data->ep_in->desc =
       (struct usb_endpoint_descriptor*)&opg_config_desc.ep_in;
     opg_config_desc.ep_in.bEndpointAddress = data->ep_in->address;
-    rc = usb_ep_enable(data->ep_in);
-    if (rc) {
-      printk("%s: failed to enable %s, result %d\n", opg_driver_name, data->ep_in->name, rc);
-      return -EOPNOTSUPP;
-    }
   } else {
     printk("%s: failed to allocate ep-in\n", opg_driver_name);
     return -EOPNOTSUPP;
@@ -384,10 +362,6 @@ static int do_set_interface(struct driver_data* data) {
     data->ep_out->desc =
       (struct usb_endpoint_descriptor*)&opg_config_desc.ep_out;
     opg_config_desc.ep_out.bEndpointAddress = data->ep_out->address;
-    rc = usb_ep_enable(data->ep_out);
-    if (rc) {
-      printk("%s: failed to enable %s, result %d\n", opg_driver_name, data->ep_out->name, rc);
-    }
   } else {
     printk("%s: failed to allocate ep-out, ignoring\n", opg_driver_name);
   }
@@ -402,6 +376,15 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
   data->gadget = gadget;
 
   set_gadget_data(gadget, data);
+
+  // Initialize EP0 for setup.
+  data->ep0_request = usb_ep_alloc_request(gadget->ep0, GFP_KERNEL);
+  if (!data->ep0_request)
+    return -ENOMEM;
+  data->ep0_request->buf = kmalloc(USB_BUFSIZ, GFP_KERNEL);
+  if (!data->ep0_request->buf)
+    return -ENOMEM;
+  gadget->ep0->driver_data = data;
 
   rc = do_set_interface(data);
   if (rc) {
@@ -478,7 +461,8 @@ static int recv_func(void *unused)
 {
   // must larger than sizeof(switch_controller)
   const int BUF_LEN = 64;
-  struct socket *sock;
+  struct socket v_socket;
+  struct socket *sock = &v_socket;
   struct sockaddr_in s_addr;
   unsigned short portnum = 0x8888;
   int ret = 0;
@@ -493,7 +477,7 @@ static int recv_func(void *unused)
   s_addr.sin_port = htons(portnum);
   s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-  sock = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
+  // sock = (struct socket *)kmalloc(sizeof(struct socket), GFP_KERNEL);
 
   /*create a socket*/
   ret = sock_create_kern(&init_net, PF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock);
@@ -542,7 +526,7 @@ static int recv_func(void *unused)
 
   /*release socket*/
   sock_release(sock);
-  kfree(sock);
+  // kfree(sock);
   return 0;
 }
 
