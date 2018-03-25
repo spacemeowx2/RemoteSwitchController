@@ -92,12 +92,75 @@ class PadButton {
         return [byte1, byte2, byte3]
     }
 }
+class MouseStick {
+    constructor (analogStick) {
+        this.stick = analogStick
+        this.rX = 0
+        this.rY = 0
+        this.lt = performance.now()
+        this.ds = []
+    }
+    onMove (x, y) {
+        this.rX += x / 2
+        this.rY += y / 1.5
+        const MAX = 400
+        if (this.rX > MAX) {
+            this.rX = MAX
+        } else if (this.rX < -MAX) {
+            this.rX = -MAX
+        }
+        if (this.rY > MAX) {
+            this.rY = MAX
+        } else if (this.rY < -MAX) {
+            this.rY = -MAX
+        }
+    }
+    onSend () {
+        const now = performance.now()
+        const delta = (now - this.lt) / 100
+        this.ds.push(delta)
+        if (this.ds.length > 60) {
+            this.ds.shift()
+        }
+        const avgDelta = this.ds.reduce((a, b) => a + b) / this.ds.length
+        const _o2v = o => -0.0002 * o * o * o + 0.0335 * o * o + 1.1722 * o
+        const o2v = o => o < 0 ? -_o2v(-o) : _o2v(o)
+
+        const dx = o2v((this.stick.x - 0.5) * 256) * delta
+        const dy = o2v((this.stick.y - 0.5) * 256) * delta
+        if (dx < Math.abs(this.rX)) {
+            this.rX -= dx
+        } else {
+            this.rX = 0
+        }
+        if (dy < Math.abs(this.rY)) {
+            this.rY -= dy
+        } else {
+            this.rY = 0
+        }
+//    offset
+// 128 - 10, 10s 144°
+// 128 - 20, 10s 360°
+// 128 - 40, 10s 720° + 180° = 900°
+// 128 - 60, 10s 4 * 360 + 90 =  1530°
+// 128 - 80, 10s 6 * 360 + 90 =  2250°
+        if (this.rX != 0) {
+            this.stick.x = this.rX / 100 + 0.5
+        }
+        if (this.rY != 0) {
+            this.stick.y = this.rY / 100 + 0.5
+        }
+
+        this.lt = now
+    }
+}
 class Gamepad {
     constructor (pad, ws) {
         const $ = (q) => pad.querySelector(q)
         this.pad = pad
         this.ls = new AnalogStick($('#l-stick'))
         this.rs = new AnalogStick($('#r-stick'))
+        this.ms = new MouseStick(this.rs)
         this.lockMouse = false
         this.ws = ws
         this.button = new PadButton()
@@ -131,6 +194,8 @@ class Gamepad {
         this.fakeLSState = new Map([...this.fakeLSMap.keys()].map(k => [k, 0]))
         this.rX = 0
         this.rY = 0
+
+        setInterval(() => this.send(), 1)
     }
     bind (ipt) {
         this.ipt = ipt
@@ -173,14 +238,14 @@ class Gamepad {
         if (this.mouseBtnMap.has(b)) {
             btns[this.mouseBtnMap.get(b)] = 1
         }
-        this.send()
+        // this.send()
     }
     onMouseUp (b) {
         const btns = this.button.btns
         if (this.mouseBtnMap.has(b)) {
             btns[this.mouseBtnMap.get(b)] = 0
         }
-        this.send()
+        // this.send()
     }
     onKeyDown (c) {
         const btns = this.button.btns
@@ -190,7 +255,7 @@ class Gamepad {
         } else if (this.btnMap.has(c)) {
             btns[this.btnMap.get(c)] = 1
         }
-        this.send()
+        // this.send()
     }
     onKeyUp (c) {
         const btns = this.button.btns
@@ -200,28 +265,20 @@ class Gamepad {
         } else if (this.btnMap.has(c)) {
             btns[this.btnMap.get(c)] = 0
         }
-        this.send()
+        // this.send()
     }
     onMove (x, y) {
-        if (this.tmr) {
-            clearTimeout(this.tmr)
-            this.tmr = undefined
-        }
-        x += this.rX
-        y += this.rY
-        this.rs.x = x / 128 + 0.5
-        this.rs.y = y / 128 + 0.5
-        this.send()
-        if (x != 0 || y != 0) {
-            this.tmr = setTimeout(() => this.onMove(0, 0), 20)
-        }
+        this.ms.onMove(x, y)
     }
     send () {
         const bytes = [...this.button.toBytes(), ...this.ls.toBytes(), ...this.rs.toBytes(), 0]
         const u8 = new Uint8Array(bytes)
         this.ws.send(u8.buffer)
+        this.ms.onSend()
     }
 }
 let ws = new WebSocket('ws://localhost:26214')
-let gamepad = new Gamepad(document.querySelector('.gamepad'), ws)
-gamepad.bind(document.querySelector('#input'))
+ws.onopen = () => {
+    let gamepad = new Gamepad(document.querySelector('.gamepad'), ws)
+    gamepad.bind(document.querySelector('#input'))
+}
