@@ -102,7 +102,7 @@ class MouseStick {
     }
     onMove (x, y) {
         this.rX += x / 2
-        this.rY += y / 1.5
+        this.rY += y / 2
         const MAX = 400
         if (this.rX > MAX) {
             this.rX = MAX
@@ -116,6 +116,8 @@ class MouseStick {
         }
     }
     onSend () {
+        const fixOffset = 0.5
+        const gate = 50
         const now = performance.now()
         const delta = (now - this.lt) / 100
         this.ds.push(delta)
@@ -144,11 +146,25 @@ class MouseStick {
 // 128 - 40, 10s 720° + 180° = 900°
 // 128 - 60, 10s 4 * 360 + 90 =  1530°
 // 128 - 80, 10s 6 * 360 + 90 =  2250°
-        if (this.rX != 0) {
-            this.stick.x = this.rX / 100 + 0.5
+        const aX = Math.abs(this.rX)
+        const aY = Math.abs(this.rY)
+        if (aX > gate) {
+            if (this.rX > 0) {
+                this.stick.x = 0.5 + fixOffset
+            } else {
+                this.stick.x = 0.5 - fixOffset
+            }
+        } else {
+            this.stick.x = 0.5 + this.rX / gate * fixOffset
         }
-        if (this.rY != 0) {
-            this.stick.y = this.rY / 100 + 0.5
+        if (aY > gate) {
+            if (this.rY > 0) {
+                this.stick.y = 0.5 + fixOffset
+            } else {
+                this.stick.y = 0.5 - fixOffset
+            }
+        } else {
+            this.stick.y = 0.5 + this.rY / gate * fixOffset
         }
 
         this.lt = now
@@ -180,6 +196,7 @@ class Gamepad {
             [89, 0],   // y, Y
             [69, 2],   // e, A
             [66, 1],   // b, B
+            [72, 12],  // , Home
         ])
         this.mouseBtnMap = new Map([
             [0, 7],
@@ -277,8 +294,9 @@ class Gamepad {
         this.ms.onSend()
     }
 }
+let gamepad
 let ws = new WebSocket('ws://localhost:26214')
 ws.onopen = () => {
-    let gamepad = new Gamepad(document.querySelector('.gamepad'), ws)
+    gamepad = new Gamepad(document.querySelector('.gamepad'), ws)
     gamepad.bind(document.querySelector('#input'))
 }
