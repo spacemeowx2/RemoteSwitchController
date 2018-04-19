@@ -1,5 +1,5 @@
 ifneq ($(KERNELRELEASE),)
-obj-m   := hid_opg.o
+obj-m   := hid_pro.o
 else
 KDIR    := /lib/modules/$(shell uname -r)/build
 PWD     := $(shell pwd)

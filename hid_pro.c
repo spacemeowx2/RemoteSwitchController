@@ -50,7 +50,7 @@ struct driver_data {
   struct usb_request* ep_out_request;
 };
 
-#include "hid_opg_hori.h"
+#include "hid_pro.h"
 
 static DEFINE_SPINLOCK(switch_controller_lock);
 static union SwitchController switch_controller;
