@@ -66,8 +66,8 @@ struct usb_device_descriptor device_desc = {
   .bDeviceSubClass    = 0,
   .bDeviceProtocol    = 0,
   .bMaxPacketSize0    = 64,
-  .idVendor           = cpu_to_le16(OPG_VENDOR_ID),
-  .idProduct          = cpu_to_le16(OPG_PRODUCT_ID),
+  .idVendor           = cpu_to_le16(PRO_VENDOR_ID),
+  .idProduct          = cpu_to_le16(PRO_PRODUCT_ID),
   .bcdDevice          = cpu_to_le16(0x0572),
   .iManufacturer      = IDX_MANUFACTURER,
   .iProduct           = IDX_PRODUCT,
@@ -163,20 +163,20 @@ static int get_descriptor(
       if (device_desc.bMaxPacketSize0 > gadget->ep0->maxpacket) {
         device_desc.bMaxPacketSize0 = gadget->ep0->maxpacket;
         printk("%s: shrink ep0 packet size %d\n",
-            opg_driver_name, device_desc.bMaxPacketSize0);
+            pro_driver_name, device_desc.bMaxPacketSize0);
       }
       memcpy(data->ep0_request->buf, &device_desc, sizeof(device_desc));
       return sizeof(device_desc);
     case USB_DT_CONFIG:
-      memcpy(data->ep0_request->buf, &opg_config_desc, sizeof(opg_config_desc));
-      return sizeof(opg_config_desc);
+      memcpy(data->ep0_request->buf, &pro_config_desc, sizeof(pro_config_desc));
+      return sizeof(pro_config_desc);
     case USB_DT_STRING:
       if (index) {
         struct usb_string_descriptor* buf = data->ep0_request->buf;
-        const char* string = opg_get_string(index);
+        const char* string = pro_get_string(index);
         size_t length;
         if (!string) {
-          printk("%s: unknown string index %d\n", opg_driver_name, index);
+          printk("%s: unknown string index %d\n", pro_driver_name, index);
           break;
         }
         buf->bDescriptorType = USB_DT_STRING;
@@ -189,10 +189,10 @@ static int get_descriptor(
           string_desc_lang.bLength);
       return string_desc_lang.bLength;
     case USB_DT_HID_REPORT:
-      memcpy(data->ep0_request->buf, opg_hid_report, sizeof(opg_hid_report));
-      return sizeof(opg_hid_report);
+      memcpy(data->ep0_request->buf, pro_hid_report, sizeof(pro_hid_report));
+      return sizeof(pro_hid_report);
     default:
-      printk("%s: unknown descriptor %02x, ignoring\n", opg_driver_name, type);
+      printk("%s: unknown descriptor %02x, ignoring\n", pro_driver_name, type);
       break;
   }
   return -EOPNOTSUPP;
@@ -202,7 +202,7 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
   struct driver_data* data = ep->driver_data;
   if (r->status) {
     printk("%s: failed on setup; status=%d, bRequestType=%02x, bRequest=%02x\n",
-        opg_driver_name, r->status, data->last_request_type,
+        pro_driver_name, r->status, data->last_request_type,
         data->last_request);
   }
 }
@@ -210,7 +210,7 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
 static void report_complete(struct usb_ep* ep, struct usb_request* r) {
   int result;
   if (r->status) {
-    printk("%s: failed to send a report, suspending\n", opg_driver_name);
+    printk("%s: failed to send a report, suspending\n", pro_driver_name);
     return;
   }
 
@@ -222,7 +222,7 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
 
   result = usb_ep_queue(ep, r, GFP_ATOMIC);
   if (result < 0)
-    printk("%s: failed to queue a report\n", opg_driver_name);
+    printk("%s: failed to queue a report\n", pro_driver_name);
 }
 
 static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
@@ -258,7 +258,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
             report_complete(data->ep_in, data->ep_in_request);
             value = w_length;
           } else {
-            printk("%s: failed to setup endpoints\n", opg_driver_name);
+            printk("%s: failed to setup endpoints\n", pro_driver_name);
             value = -ENOMEM;
           }
         } else {
@@ -267,7 +267,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         break;
       default:
         printk("%s: standard setup not impl: %02x-%02x\n",
-            opg_driver_name, r->bRequestType, r->bRequest);
+            pro_driver_name, r->bRequestType, r->bRequest);
         break;
     } else if (type == USB_TYPE_CLASS) switch (r->bRequest) {
       case HID_REQ_GET_REPORT:
@@ -284,11 +284,11 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
         break;
       default:
         printk("%s: hid class setup not impl: %02x-%02x\n",
-            opg_driver_name, r->bRequestType, r->bRequest);
+            pro_driver_name, r->bRequestType, r->bRequest);
         break;
     } else {
         printk("%s: setup not impl: %02x-%02x\n",
-            opg_driver_name, r->bRequestType, r->bRequest);
+            pro_driver_name, r->bRequestType, r->bRequest);
     }
   }
 
@@ -299,7 +299,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
     data->last_request = r->bRequest;
     value = usb_ep_queue(gadget->ep0, data->ep0_request, GFP_ATOMIC);
     if (value < 0)
-      printk("%s: usb_ep_queue returns a negative value\n", opg_driver_name);
+      printk("%s: usb_ep_queue returns a negative value\n", pro_driver_name);
   }
 
   return value;
@@ -346,24 +346,24 @@ static int do_set_interface(struct driver_data* data) {
   }
 
   // Claim endpoints for interrupt transfer.
-  data->ep_in = find_int_ep(gadget, opg_config_desc.ep_in.wMaxPacketSize, 1);
+  data->ep_in = find_int_ep(gadget, pro_config_desc.ep_in.wMaxPacketSize, 1);
   if (data->ep_in) {
     data->ep_in->driver_data = data;
     data->ep_in->desc =
-      (struct usb_endpoint_descriptor*)&opg_config_desc.ep_in;
-    opg_config_desc.ep_in.bEndpointAddress = data->ep_in->address;
+      (struct usb_endpoint_descriptor*)&pro_config_desc.ep_in;
+    pro_config_desc.ep_in.bEndpointAddress = data->ep_in->address;
   } else {
-    printk("%s: failed to allocate ep-in\n", opg_driver_name);
+    printk("%s: failed to allocate ep-in\n", pro_driver_name);
     return -EOPNOTSUPP;
   }
-  data->ep_out = find_int_ep(gadget, opg_config_desc.ep_out.wMaxPacketSize, 0);
+  data->ep_out = find_int_ep(gadget, pro_config_desc.ep_out.wMaxPacketSize, 0);
   if (data->ep_out) {
     data->ep_out->driver_data = data;
     data->ep_out->desc =
-      (struct usb_endpoint_descriptor*)&opg_config_desc.ep_out;
-    opg_config_desc.ep_out.bEndpointAddress = data->ep_out->address;
+      (struct usb_endpoint_descriptor*)&pro_config_desc.ep_out;
+    pro_config_desc.ep_out.bEndpointAddress = data->ep_out->address;
   } else {
-    printk("%s: failed to allocate ep-out, ignoring\n", opg_driver_name);
+    printk("%s: failed to allocate ep-out, ignoring\n", pro_driver_name);
   }
   return 0;
 }
@@ -388,7 +388,7 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
 
   rc = do_set_interface(data);
   if (rc) {
-    printk("%s: failed at do_set_interface %d\n", opg_driver_name, rc);
+    printk("%s: failed at do_set_interface %d\n", pro_driver_name, rc);
     return rc;
   }
   return 0;
@@ -431,17 +431,17 @@ static void disconnect(struct usb_gadget* gadget) {
   if (!data)
     return;
 
-  printk("%s: disconnect\n", opg_driver_name);
+  printk("%s: disconnect\n", pro_driver_name);
 
   rc = do_set_interface(data);
   if (rc) {
-    printk("%s: failed at do_set_interface %d\n", opg_driver_name, rc);
+    printk("%s: failed at do_set_interface %d\n", pro_driver_name, rc);
   }
   // TODO: finalize endpoints for interrupt in/out.
 }
 
 static void not_impl(struct usb_gadget* gadget) {
-  printk("%s: not impl\n", opg_driver_name);
+  printk("%s: not impl\n", pro_driver_name);
 }
 
 static struct usb_gadget_driver driver = {
@@ -531,7 +531,7 @@ static int recv_func(void *unused)
 }
 
 static int __init init(void) {
-  driver.function = opg_driver_name;
+  driver.function = pro_driver_name;
   recv_task = kthread_run(recv_func, NULL, "recv_task");
   return usb_gadget_probe_driver(&driver);
 }
