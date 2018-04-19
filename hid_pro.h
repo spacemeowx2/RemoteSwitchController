@@ -1,7 +1,7 @@
 static char pro_driver_name[] = "Gadget HID Driver for Nintendo Switch";
 
-#define PRO_VENDOR_ID 0x0f0d
-#define PRO_PRODUCT_ID 0x00c1
+#define PRO_VENDOR_ID 0x057E
+#define PRO_PRODUCT_ID 0x2009
 
 static char pro_hid_report[] = {
   0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
@@ -202,9 +202,11 @@ union SwitchController {
 static const char* pro_get_string(int idx) {
   switch (idx) {
     case IDX_MANUFACTURER:
-      return "HORI CO.,LTD.";
+      return "Nintendo Co., Ltd.";
     case IDX_PRODUCT:
-      return "HORIPAD S";
+      return "Pro Controller";
+    case IDX_USER:
+      return "000000000001";
     default:
       break;
   }

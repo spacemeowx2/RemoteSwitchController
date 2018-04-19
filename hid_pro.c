@@ -13,6 +13,7 @@ enum {
   IDX_NULL,
   IDX_MANUFACTURER,
   IDX_PRODUCT,
+  IDX_SERIAL_NO,
 
   IDX_USER,
 };
@@ -68,10 +69,10 @@ struct usb_device_descriptor device_desc = {
   .bMaxPacketSize0    = 64,
   .idVendor           = cpu_to_le16(PRO_VENDOR_ID),
   .idProduct          = cpu_to_le16(PRO_PRODUCT_ID),
-  .bcdDevice          = cpu_to_le16(0x0572),
+  .bcdDevice          = cpu_to_le16(0x0200),
   .iManufacturer      = IDX_MANUFACTURER,
   .iProduct           = IDX_PRODUCT,
-  .iSerialNumber      = IDX_NULL,
+  .iSerialNumber      = IDX_SERIAL_NO,
   .bNumConfigurations = 1,
 };
 
