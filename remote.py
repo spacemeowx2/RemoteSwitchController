@@ -148,6 +148,8 @@ class AutoDrawer:
         image = [[0 for j in range(320)] for i in range(120)]
         with Image.open(filename) as img:
             img = img.resize((320, 120))
+            img = img.convert('1')
+            img.save('1.bmp')
             for y in range(120):
                 for x in range(320):
                     c = img.getpixel((x, y))
@@ -190,8 +192,8 @@ class AutoDrawer:
         self.send(2.5)
         c.d_right = 1
         self.send(6)
-    def test(self):
-        pass
+    def test(self, filename):
+        self.getImage(filename)
     def send(self, wait = 0):
         # print 'send' + repr(self.c)
         self.sock.sendto(str(self.c), self.addr)
@@ -263,4 +265,4 @@ while True:
     if cmd == 'go1':
         drawer.go1()
     if cmd == 'test':
-        drawer.test()
+        drawer.test(args[0])
