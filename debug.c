@@ -6,6 +6,7 @@ typedef uint8_t __u8;
 typedef uint8_t u8;
 typedef uint16_t __le16;
 #define USB_DT_CONFIG_SIZE              9
+#define USB_DT_DEVICE_SIZE              18
 /*
  * Descriptor types ... USB 2.0 spec table 9.5
  */
@@ -102,6 +103,23 @@ struct usb_interface_descriptor {
         __u8  bInterfaceProtocol;
         __u8  iInterface;
 } __attribute__ ((packed));
+struct usb_device_descriptor {
+        __u8  bLength;
+        __u8  bDescriptorType;
+
+        __le16 bcdUSB;
+        __u8  bDeviceClass;
+        __u8  bDeviceSubClass;
+        __u8  bDeviceProtocol;
+        __u8  bMaxPacketSize0;
+        __le16 idVendor;
+        __le16 idProduct;
+        __le16 bcdDevice;
+        __u8  iManufacturer;
+        __u8  iProduct;
+        __u8  iSerialNumber;
+        __u8  bNumConfigurations;
+} __attribute__ ((packed));
 
 #include "usb_common.h"
 #include "hid_pro.h"
@@ -120,7 +138,27 @@ void print_bin(const void* data, size_t len) {
     printf("\n\n");
 }
 
+struct usb_device_descriptor device_desc = {
+  .bLength            = USB_DT_DEVICE_SIZE,
+  .bDescriptorType    = USB_DT_DEVICE,
+  .bcdUSB             = cpu_to_le16(0x200),
+  .bDeviceClass       = USB_CLASS_PER_INTERFACE,
+  .bDeviceSubClass    = 0,
+  .bDeviceProtocol    = 0,
+  .bMaxPacketSize0    = 64,
+  .idVendor           = cpu_to_le16(PRO_VENDOR_ID),
+  .idProduct          = cpu_to_le16(PRO_PRODUCT_ID),
+  .bcdDevice          = cpu_to_le16(0x0200),
+  .iManufacturer      = IDX_MANUFACTURER,
+  .iProduct           = IDX_PRODUCT,
+  .iSerialNumber      = IDX_SERIAL_NO,
+  .bNumConfigurations = 1,
+};
+
 int main() {
+    puts("config_desc");
     print_bin(&pro_config_desc, sizeof(pro_config_desc));
+    puts("device_desc");
+    print_bin(&device_desc, sizeof(device_desc));
     return 0;
 }

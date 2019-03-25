@@ -1,11 +1,9 @@
 
 enum {
-  IDX_NULL,
-  IDX_MANUFACTURER,
-  IDX_PRODUCT,
-  IDX_SERIAL_NO,
-
-  IDX_USER,
+  IDX_NULL          = 0,
+  IDX_MANUFACTURER  = 1,
+  IDX_PRODUCT       = 2,
+  IDX_SERIAL_NO     = 3,
 };
 
 #define USB_DT_HID 0x21

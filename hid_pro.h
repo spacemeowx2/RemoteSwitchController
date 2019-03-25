@@ -205,7 +205,7 @@ static const char* pro_get_string(int idx) {
       return "Nintendo Co., Ltd.";
     case IDX_PRODUCT:
       return "Pro Controller";
-    case IDX_USER:
+    case IDX_SERIAL_NO:
       return "000000000001";
     default:
       break;
