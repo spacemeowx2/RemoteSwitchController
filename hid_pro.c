@@ -195,6 +195,7 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   data->ep0_request->length = 0;
   data->ep0_request->status = 0;
 
+  value = pro_setup(gadget, r);
   if (value == -EOPNOTSUPP) {
     int type = r->bRequestType & USB_TYPE_MASK;
     if (type == USB_TYPE_STANDARD) switch (r->bRequest) {
@@ -400,8 +401,12 @@ static void disconnect(struct usb_gadget* gadget) {
   // TODO: finalize endpoints for interrupt in/out.
 }
 
-static void not_impl(struct usb_gadget* gadget) {
-  printk("%s: not impl\n", pro_driver_name);
+static void suspend(struct usb_gadget* gadget) {
+  printk("%s: suspend not impl\n", pro_driver_name);
+}
+
+static void resume(struct usb_gadget* gadget) {
+  printk("%s: resume not impl\n", pro_driver_name);
 }
 
 static struct usb_gadget_driver driver = {
@@ -411,8 +416,8 @@ static struct usb_gadget_driver driver = {
   .unbind     = unbind,
   .setup      = setup,
   .disconnect = disconnect,
-  .suspend    = not_impl,
-  .resume     = not_impl,
+  .suspend    = suspend,
+  .resume     = resume,
   .driver = { .owner = THIS_MODULE },
 };
 
