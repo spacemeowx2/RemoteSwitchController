@@ -111,7 +111,7 @@ struct pro_config_descriptor {
     .bNumInterfaces      = 1,
     .bConfigurationValue = 1,
     .iConfiguration      = IDX_NULL,
-    .bmAttributes        = USB_CONFIG_ATT_ONE,
+    .bmAttributes        = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_WAKEUP,
     .bMaxPower           = 250,  // x 2mA
   },
   .interface = {
@@ -141,7 +141,7 @@ struct pro_config_descriptor {
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
-    .bInterval           = 5,
+    .bInterval           = 8,
   },
   .ep_in = {
     .bLength             = USB_DT_ENDPOINT_SIZE,
@@ -150,7 +150,7 @@ struct pro_config_descriptor {
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
-    .bInterval           = 5,
+    .bInterval           = 8,
   },
 };
 
