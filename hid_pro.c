@@ -41,72 +41,6 @@ struct usb_string_descriptor string_desc_lang = {
   .wData           = { cpu_to_le16(0x0409) },
 };
 
-struct ep_caps {
-  u8 address;
-  unsigned type_iso:1;
-  unsigned type_bulk:1;
-  unsigned type_int:1;
-  unsigned dir_in:1;
-  unsigned dir_out:1;
-};
-
-void estimate_ep_caps(const char* name, struct ep_caps* caps) {
-  int index = 2;
-  memset(caps, 0, sizeof(struct ep_caps));
-
-  // unknown convention.
-  if (name[0] != 'e' || name[1] != 'p')
-    return;
-
-  // ep[1-9]?.*: address restriction
-  if ('1' <= name[index] && name[index] <= '9') {
-    caps->address = name[index] - '0';
-    index++;
-  }
-
-  if (name[index] == 'i') {
-    // ep[1-9]?in.*
-    index += 2;
-    caps->dir_in = 1;
-  } else if (name[index] == 'o') {
-    // ep[1-9]?out.*
-    index += 3;
-    caps->dir_out = 1;
-  } else {
-    // ep[1-9]?.*
-    caps->dir_in = 1;
-    caps->dir_out = 1;
-  }
-
-  if (!name[index]) {
-    // ep[1-9]?{in|out}?
-    caps->type_iso = 1;
-    caps->type_bulk = 1;
-    caps->type_int = 1;
-    return;
-  }
-
-  // unknown convention.
-  if (name[index] != '-')
-    return;
-  index++;
-
-  if (name[index] == 'i') {
-    if (name[index + 1] == 's') {
-      // ep[1-9]?{in|out}?-iso
-      caps->type_iso = 1;
-    } else {
-      // ep[1-9]?{in|out}?-int
-      caps->type_int = 1;
-    }
-  } else if (name[index] == 'b') {
-    // ep[1-9]?{in|out}?-bulk
-    caps->type_bulk = 1;
-    caps->type_int = 1;  // Usually bulk can handle int.
-  }
-  return;
-}
-
 static void update_report(void) {
   // do nothing
 }
@@ -128,8 +62,7 @@ static int get_descriptor(
       memcpy(data->ep0_request->buf, &device_desc, sizeof(device_desc));
       return sizeof(device_desc);
     case USB_DT_CONFIG:
-      memcpy(data->ep0_request->buf, &pro_config_desc, sizeof(pro_config_desc));
-      return sizeof(pro_config_desc);
+      return usb_gadget_config_buf(&prog_config_desc, data->ep0_request->buf, USB_BUFSIZ, prog_descriptors);
     case USB_DT_STRING:
       if (index) {
         struct usb_string_descriptor* buf = data->ep0_request->buf;
@@ -266,69 +199,6 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   return value;
 }
 
-struct usb_ep* find_int_ep(struct usb_gadget* gadget, int maxpacket, int in) {
-  struct usb_ep* ep;
-  list_for_each_entry(ep, &gadget->ep_list, ep_list) {
-    struct ep_caps caps;
-    estimate_ep_caps(ep->name, &caps);
-    if (caps.type_int) {
-      if (caps.dir_in && in && ep->maxpacket >= maxpacket) {
-        ep->address = USB_DIR_IN | caps.address;
-        return ep;
-      } else if (caps.dir_out && !in && ep->maxpacket >= maxpacket) {
-        ep->address = USB_DIR_OUT | caps.address;
-        return ep;
-      }
-    }
-  }
-  return NULL;
-}
-
-static int do_set_interface(struct driver_data* data) {
-  struct usb_gadget* gadget = data->gadget;
-
-  if (data->ep_in_request) {
-    if (data->ep_in_request->buf)
-      kfree(data->ep_in_request->buf);
-    usb_ep_free_request(data->ep_in, data->ep_in_request);
-    data->ep_in_request = NULL;
-  }
-  if (data->ep_in) {
-    usb_ep_disable(data->ep_in);
-    data->ep_in->driver_data = NULL;
-    data->ep_in->desc = NULL;
-    data->ep_in = NULL;
-  }
-  if (data->ep_out) {
-    usb_ep_disable(data->ep_out);
-    data->ep_out->driver_data = NULL;
-    data->ep_out->desc = NULL;
-    data->ep_out = NULL;
-  }
-
-  // Claim endpoints for interrupt transfer.
-  data->ep_in = find_int_ep(gadget, pro_config_desc.ep_in.wMaxPacketSize, 1);
-  if (data->ep_in) {
-    data->ep_in->driver_data = data;
-    data->ep_in->desc =
-      (struct usb_endpoint_descriptor*)&pro_config_desc.ep_in;
-    pro_config_desc.ep_in.bEndpointAddress = data->ep_in->address;
-  } else {
-    printk("%s: failed to allocate ep-in\n", pro_driver_name);
-    return -EOPNOTSUPP;
-  }
-  data->ep_out = find_int_ep(gadget, pro_config_desc.ep_out.wMaxPacketSize, 0);
-  if (data->ep_out) {
-    data->ep_out->driver_data = data;
-    data->ep_out->desc =
-      (struct usb_endpoint_descriptor*)&pro_config_desc.ep_out;
-    pro_config_desc.ep_out.bEndpointAddress = data->ep_out->address;
-  } else {
-    printk("%s: failed to allocate ep-out, ignoring\n", pro_driver_name);
-  }
-  return 0;
-}
-
 static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
   int rc;
   struct driver_data* data = kzalloc(sizeof(struct driver_data), GFP_KERNEL);
@@ -347,11 +217,25 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
     return -ENOMEM;
   gadget->ep0->driver_data = data;
 
-  rc = do_set_interface(data);
-  if (rc) {
-    printk("%s: failed at do_set_interface %d\n", pro_driver_name, rc);
-    return rc;
+  // Claim endpoints for interrupt transfer.
+  data->ep_in = usb_ep_autoconfig(gadget, &prog_in_ep_desc);
+  if (data->ep_in) {
+    data->ep_in->driver_data = data;
+    data->ep_in->desc = &prog_in_ep_desc;
+    prog_in_ep_desc.bEndpointAddress = data->ep_in->address;
+  } else {
+    printk("%s: failed to allocate ep-in\n", pro_driver_name);
+    return -EOPNOTSUPP;
   }
+  data->ep_out = usb_ep_autoconfig(gadget, &prog_out_ep_desc);
+  if (data->ep_out) {
+    data->ep_out->driver_data = data;
+    data->ep_out->desc = &prog_out_ep_desc;
+    prog_out_ep_desc.bEndpointAddress = data->ep_out->address;
+  } else {
+    printk("%s: failed to allocate ep-out, ignoring\n", pro_driver_name);
+  }
+
   return 0;
 }
 
@@ -394,9 +278,24 @@ static void disconnect(struct usb_gadget* gadget) {
 
   printk("%s: disconnect\n", pro_driver_name);
 
-  rc = do_set_interface(data);
-  if (rc) {
-    printk("%s: failed at do_set_interface %d\n", pro_driver_name, rc);
+
+  if (data->ep_in_request) {
+    if (data->ep_in_request->buf)
+      kfree(data->ep_in_request->buf);
+    usb_ep_free_request(data->ep_in, data->ep_in_request);
+    data->ep_in_request = NULL;
+  }
+  if (data->ep_in) {
+    usb_ep_disable(data->ep_in);
+    data->ep_in->driver_data = NULL;
+    data->ep_in->desc = NULL;
+    data->ep_in = NULL;
+  }
+  if (data->ep_out) {
+    usb_ep_disable(data->ep_out);
+    data->ep_out->driver_data = NULL;
+    data->ep_out->desc = NULL;
+    data->ep_out = NULL;
   }
   // TODO: finalize endpoints for interrupt in/out.
 }

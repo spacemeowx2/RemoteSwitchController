@@ -97,61 +97,65 @@ static char pro_hid_report[] = {
   0xC0,              // End Collection
 };
 
-struct pro_config_descriptor {
-  struct usb_config_descriptor config;
-  struct usb_interface_descriptor interface;
-  struct usb_hid_descriptor hid;
-  struct usb_short_endpoint_descriptor ep_out;
-  struct usb_short_endpoint_descriptor ep_in;
-} __attribute__ ((packed)) pro_config_desc = {
-  .config = {
-    .bLength             = USB_DT_CONFIG_SIZE,
-    .bDescriptorType     = USB_DT_CONFIG,
-    .wTotalLength        = cpu_to_le16(sizeof(struct pro_config_descriptor)),
-    .bNumInterfaces      = 1,
-    .bConfigurationValue = 1,
-    .iConfiguration      = IDX_NULL,
-    .bmAttributes        = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_WAKEUP,
-    .bMaxPower           = 250,  // x 2mA
-  },
-  .interface = {
-    .bLength             = USB_DT_INTERFACE_SIZE,
-    .bDescriptorType     = USB_DT_INTERFACE,
-    .bInterfaceNumber    = 0,
-    .bAlternateSetting   = 0,
-    .bNumEndpoints       = 2,
-    .bInterfaceClass     = USB_CLASS_HID,
-    .bInterfaceSubClass  = 0x00,
-    .bInterfaceProtocol  = 0x00,
-    .iInterface          = IDX_NULL,
-  },
-  .hid = {
-    .bLength             = sizeof(struct usb_hid_descriptor),
-    .bDescriptorType     = USB_DT_HID,
-    .bcdHID              = cpu_to_le16(0x0111),
-    .bCountryCode        = 0,
-    .bNumReports         = 1,
-    .bReportType         = USB_DT_HID_REPORT,
-    .wReportLength       = cpu_to_le16(sizeof(pro_hid_report)),
-  },
-  .ep_out = {
+struct usb_config_descriptor prog_config_desc = {
+  .bLength             = USB_DT_CONFIG_SIZE,
+  .bDescriptorType     = USB_DT_CONFIG,
+  // .wTotalLength        = cpu_to_le16(sizeof(struct pro_config_descriptor)),
+  .bNumInterfaces      = 1,
+  .bConfigurationValue = 1,
+  .iConfiguration      = IDX_NULL,
+  .bmAttributes        = USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_WAKEUP,
+  .bMaxPower           = 250,  // x 2mA
+};
+
+struct usb_interface_descriptor prog_interface_desc = {
+  .bLength             = USB_DT_INTERFACE_SIZE,
+  .bDescriptorType     = USB_DT_INTERFACE,
+  .bInterfaceNumber    = 0,
+  .bAlternateSetting   = 0,
+  .bNumEndpoints       = 2,
+  .bInterfaceClass     = USB_CLASS_HID,
+  .bInterfaceSubClass  = 0x00,
+  .bInterfaceProtocol  = 0x00,
+  .iInterface          = IDX_NULL,
+};
+struct hid_descriptor prog_desc = {
+  .bLength                      = sizeof prog_desc,
+  .bDescriptorType              = HID_DT_HID,
+  .bcdHID                       = cpu_to_le16(0x0111),
+  .bCountryCode                 = 0,
+  .bNumDescriptors              = 1,
+  .desc[0].bDescriptorType      = HID_DT_REPORT,
+  .desc[0].wDescriptorLength    = cpu_to_le16(sizeof(pro_hid_report)),
+};
+
+struct usb_endpoint_descriptor prog_out_ep_desc = {
     .bLength             = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType     = USB_DT_ENDPOINT,
-    .bEndpointAddress    = USB_DIR_OUT | 3,  // will be overriden
+    .bEndpointAddress    = USB_DIR_OUT,     // will be overriden
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
-  },
-  .ep_in = {
+};
+
+struct usb_endpoint_descriptor prog_in_ep_desc = {
     .bLength             = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType     = USB_DT_ENDPOINT,
-    .bEndpointAddress    = USB_DIR_IN | 4,  // will be overriden
+    .bEndpointAddress    = USB_DIR_IN,      // will be overriden
     .bmAttributes        =
       USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
-  },
+};
+
+
+static const struct usb_descriptor_header *prog_descriptors[] = {
+	(struct usb_descriptor_header *)&prog_interface_desc,
+	(struct usb_descriptor_header *)&prog_desc,
+	(struct usb_descriptor_header *)&prog_out_ep_desc,
+	(struct usb_descriptor_header *)&prog_in_ep_desc,
+	NULL,
 };
 
 union SwitchController {
