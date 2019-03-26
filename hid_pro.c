@@ -118,6 +118,14 @@ static void report_complete(struct usb_ep* ep, struct usb_request* r) {
     printk("%s: failed to queue a report\n", pro_driver_name);
 }
 
+static void input_complete(struct usb_ep* ep, struct usb_request* r) {
+  if (r->status) {
+    printk("%s: failed to recv a report, suspending\n", pro_driver_name);
+    return;
+  }
+  printk("%s: input_complete", pro_driver_name);
+}
+
 static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
   u16 w_length = le16_to_cpu(r->wLength);
@@ -157,6 +165,26 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
           }
         } else {
           value = w_length;
+        }
+        if (value >= 0 && data->ep_out && !data->ep_out_request) {
+          data->ep_out_request = usb_ep_alloc_request(data->ep_out, GFP_KERNEL);
+          if (data->ep_out_request) {
+            data->ep_out_request->buf =
+              kmalloc(data->ep_out->desc->wMaxPacketSize, GFP_KERNEL);
+            if (data->ep_out_request->buf)
+              usb_ep_enable(data->ep_out);
+          }
+          if (data->ep_out_request && data->ep_out_request->buf) {
+            data->ep_out_request->status = 0;
+            data->ep_out_request->zero = 0;
+            data->ep_out_request->complete = input_complete;
+            data->ep_out_request->length = data->ep_out->desc->wMaxPacketSize;
+            input_complete(data->ep_out, data->ep_out_request);
+            value = w_length;
+          } else {
+            printk("%s: failed to setup endpoints\n", pro_driver_name);
+            value = -ENOMEM;
+          }
         }
         break;
       default:
@@ -200,7 +228,6 @@ static int setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
 }
 
 static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
-  int rc;
   struct driver_data* data = kzalloc(sizeof(struct driver_data), GFP_KERNEL);
   if (!data)
     return -ENOMEM;
@@ -227,6 +254,7 @@ static int bind(struct usb_gadget* gadget, struct usb_gadget_driver *driver) {
     printk("%s: failed to allocate ep-in\n", pro_driver_name);
     return -EOPNOTSUPP;
   }
+
   data->ep_out = usb_ep_autoconfig(gadget, &prog_out_ep_desc);
   if (data->ep_out) {
     data->ep_out->driver_data = data;
@@ -258,6 +286,11 @@ static void unbind(struct usb_gadget* gadget) {
     usb_ep_disable(data->ep_out);
     data->ep_out->driver_data = NULL;
     data->ep_out->desc = NULL;
+    if (data->ep_out_request) {
+      if (data->ep_out_request->buf)
+        kfree(data->ep_out_request->buf);
+      usb_ep_free_request(data->ep_out, data->ep_out_request);
+    }
   }
 
   if (data->ep0_request) {
@@ -278,12 +311,17 @@ static void disconnect(struct usb_gadget* gadget) {
 
   printk("%s: disconnect\n", pro_driver_name);
 
-
   if (data->ep_in_request) {
     if (data->ep_in_request->buf)
       kfree(data->ep_in_request->buf);
     usb_ep_free_request(data->ep_in, data->ep_in_request);
     data->ep_in_request = NULL;
+  }
+  if (data->ep_out_request) {
+    if (data->ep_out_request->buf)
+      kfree(data->ep_out_request->buf);
+    usb_ep_free_request(data->ep_out, data->ep_out_request);
+    data->ep_out_request = NULL;
   }
   if (data->ep_in) {
     usb_ep_disable(data->ep_in);
