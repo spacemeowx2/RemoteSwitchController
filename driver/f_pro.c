@@ -13,9 +13,9 @@
 
 struct f_switchpro {
 	struct usb_function	function;
-	struct usb_ep		*in_ep;
-	struct usb_ep		*out_ep;
-    int                 cur_alt;
+	struct usb_ep				*in_ep;
+	struct usb_ep				*out_ep;
+	int                 cur_alt;
 };
 
 struct usb_interface_descriptor prog_interface_desc = {
@@ -63,8 +63,8 @@ struct usb_endpoint_descriptor prog_in_ep_desc = {
 static struct usb_descriptor_header *prog_descriptors[] = {
 	(struct usb_descriptor_header *)&prog_interface_desc,
 	(struct usb_descriptor_header *)&prog_desc,
-	(struct usb_descriptor_header *)&prog_out_ep_desc,
 	(struct usb_descriptor_header *)&prog_in_ep_desc,
+	(struct usb_descriptor_header *)&prog_out_ep_desc,
 	NULL,
 };
 
@@ -97,7 +97,9 @@ static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 	switch (status) {
 	case 0:				/* normal completion */
 		if (ep == sp->out_ep) {
-			// TODO: read something here
+			ERROR(cdev, "out_ep\n");
+		} else if (ep == sp->in_ep) {
+			// ERROR(cdev, "in_ep\n");
 		}
 		break;
 
@@ -138,9 +140,9 @@ static int switch_pro_start_ep(struct f_switchpro *sp, bool is_in)
 	struct usb_request *req;
 	int i, size, qlen, status = 0;
 
-    ep = is_in ? sp->in_ep : sp->out_ep;
-    qlen = BULK_QLEN;
-    size = BULK_BUF_SIZE;
+	ep = is_in ? sp->in_ep : sp->out_ep;
+	qlen = BULK_QLEN;
+	size = BULK_BUF_SIZE;
 
 	for (i = 0; i < qlen; i++) {
 		req = alloc_ep_req(ep, size);
@@ -252,6 +254,7 @@ autoconf_fail:
 	ret = usb_assign_descriptors(f,
         prog_descriptors, prog_descriptors,
         NULL, NULL);
+
 	if (ret)
 		return ret;
 
@@ -298,32 +301,62 @@ static int switchpro_setup(struct usb_function *f,
 	struct usb_configuration *c = f->config;
 	struct usb_request *req = c->cdev->req;
 	int value = -EOPNOTSUPP;
+	int type = ctrl->bRequestType & USB_TYPE_MASK;
+
 	u16	w_index = le16_to_cpu(ctrl->wIndex);
 	u16 w_value = le16_to_cpu(ctrl->wValue);
 	u16 w_length = le16_to_cpu(ctrl->wLength);
 
 	req->length = USB_COMP_EP0_BUFSIZ;
 
-	switch (ctrl->bRequest) {
+	if (type == USB_TYPE_STANDARD) switch (ctrl->bRequest) {
+	case USB_REQ_GET_DESCRIPTOR:
+		ERROR(c->cdev, "switchpro USB_REQ_GET_DESCRIPTOR, len %d\n", w_value >> 8);
+		switch (w_value >> 8) {
+		case HID_DT_HID:
+		{
+			w_length = min_t(unsigned short, w_length, prog_desc.bLength);
+			memcpy(req->buf, &prog_desc, w_length);
+			ERROR(c->cdev, "switchpro HID_DT_HID, len %d\n", w_length);
+			goto respond;
+			break;
+		}
+		case HID_DT_REPORT:
+			w_length = min_t(unsigned short, w_length, sizeof(pro_hid_report));
+			memcpy(req->buf, pro_hid_report, w_length);
+			ERROR(c->cdev, "switchpro HID_DT_REPORT, len %d\n", w_length);
+			goto respond;
+			break;
+		default:
+			VDBG(c->cdev, "Unknown descriptor request 0x%x\n",
+				 w_value >> 8);
+			goto stall;
+			break;
+		}
+		break;
 	default:
 		VDBG(c->cdev,
 			"unknown control req%02x.%02x v%04x i%04x l%d\n",
 			ctrl->bRequestType, ctrl->bRequest,
 			w_value, w_index, w_length);
+		goto stall;
+		break;
 	}
 
+stall:
+	return -EOPNOTSUPP;
+
+respond:
 	/* respond with data transfer or status phase? */
-	if (value >= 0) {
-		VDBG(c->cdev, "source/sink req%02x.%02x v%04x i%04x l%d\n",
-			ctrl->bRequestType, ctrl->bRequest,
-			w_value, w_index, w_length);
-		req->zero = 0;
-		req->length = value;
-		value = usb_ep_queue(c->cdev->gadget->ep0, req, GFP_ATOMIC);
-		if (value < 0)
-			ERROR(c->cdev, "source/sink response, err %d\n",
-					value);
-	}
+	VDBG(c->cdev, "switchpro req%02x.%02x v%04x i%04x l%d\n",
+		ctrl->bRequestType, ctrl->bRequest,
+		w_value, w_index, w_length);
+	req->zero = 0;
+	req->length = w_length;
+	value = usb_ep_queue(c->cdev->gadget->ep0, req, GFP_ATOMIC);
+	if (value < 0)
+		ERROR(c->cdev, "switchpro response, err %d\n",
+				value);
 
 	/* device either stalls (value < 0) or reports success */
 	return value;

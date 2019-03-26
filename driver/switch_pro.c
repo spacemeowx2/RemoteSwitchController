@@ -64,6 +64,8 @@ static int gsp_bind(struct usb_composite_dev *cdev) {
 	device_desc.iManufacturer = strings_dev[USB_GADGET_MANUFACTURER_IDX].id;
 	device_desc.iProduct = strings_dev[USB_GADGET_PRODUCT_IDX].id;
 	device_desc.iSerialNumber = strings_dev[USB_GADGET_SERIAL_IDX].id;
+	cdev->desc.bcdDevice = device_desc.bcdDevice;
+
     status = strings_dev[STRING_DESCRIPTION_IDX].id;
 	pro_config_driver.iConfiguration = status;
 
