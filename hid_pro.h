@@ -220,7 +220,7 @@ static const char* pro_get_string(int idx) {
 static int pro_setup(struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
   int type = r->bRequestType & USB_TYPE_MASK;
-  printk("pro_setup %x %x %x\n", le16_to_cpu(r->wValue), type, r->bRequest);
+  // printk("pro_setup %x %x %x\n", le16_to_cpu(r->wValue), type, r->bRequest);
   if (type == USB_TYPE_CLASS && r->bRequest == HID_REQ_GET_REPORT) {
     switch(le16_to_cpu(r->wValue)) {
       default:
