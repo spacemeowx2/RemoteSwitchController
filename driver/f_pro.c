@@ -373,10 +373,3 @@ static struct usb_function_instance *switch_pro_alloc_inst(void)
 
 	return &opts->func_inst;
 }
-
-static struct usb_function_driver SwitchPro_usb_driver = {
-    .name = "SwitchPro",
-    .mod  = THIS_MODULE,
-    .alloc_inst = switch_pro_alloc_inst,
-    .alloc_func = switch_pro_alloc_func,
-};

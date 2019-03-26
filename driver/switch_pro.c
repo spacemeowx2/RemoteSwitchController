@@ -67,11 +67,11 @@ static int gsp_bind(struct usb_composite_dev *cdev) {
     status = strings_dev[STRING_DESCRIPTION_IDX].id;
 	pro_config_driver.iConfiguration = status;
 
-    func_inst_sp = usb_get_function_instance("SwitchPro");
+    func_inst_sp = switch_pro_alloc_inst();
 	if (IS_ERR(func_inst_sp))
 		return PTR_ERR(func_inst_sp);
 
-    func_sp = usb_get_function(func_inst_sp);
+    func_sp = switch_pro_alloc_func(func_inst_sp);
 	if (IS_ERR(func_sp)) {
 		status = PTR_ERR(func_sp);
 		goto err_put_func_inst_sp;
@@ -88,10 +88,10 @@ static int gsp_bind(struct usb_composite_dev *cdev) {
     return 0;
 
 err_put_func_ss:
-	usb_put_function(func_sp);
+	func_sp->free_func(func_sp);
 	func_sp = NULL;
 err_put_func_inst_sp:
-	usb_put_function_instance(func_inst_sp);
+	func_inst_sp->free_func_inst(func_inst_sp);
 	func_inst_sp = NULL;
 
 fail:
@@ -114,12 +114,6 @@ static struct usb_composite_driver gswitch_pro_driver = {
 
 static int __init init(void)
 {
-    int status;
-
-    status = usb_function_register(&SwitchPro_usb_driver);
-    if (status) {
-        return status;
-    }
 	return usb_composite_probe(&gswitch_pro_driver);
 }
 module_init(init);
@@ -127,6 +121,5 @@ module_init(init);
 static void __exit cleanup(void)
 {
 	usb_composite_unregister(&gswitch_pro_driver);
-    usb_function_unregister(&SwitchPro_usb_driver);
 }
 module_exit(cleanup);
