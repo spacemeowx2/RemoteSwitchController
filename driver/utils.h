@@ -1,11 +1,12 @@
+#ifndef __UTILS_H_
+#define __UTILS_H_
+
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/usb/composite.h>
 #include <linux/err.h>
-#include "f_pro.h"
-#include "switch_pro.h"
 
 struct usb_request *alloc_ep_req(struct usb_ep *ep, int len)
 {
@@ -28,3 +29,5 @@ static inline void free_ep_req(struct usb_ep *ep, struct usb_request *req)
 	kfree(req->buf);
 	usb_ep_free_request(ep, req);
 }
+
+#endif

@@ -4,11 +4,10 @@
 #include <linux/module.h>
 #include <linux/usb/composite.h>
 #include <linux/err.h>
-#include "utils.c"
+#include "utils.h"
 #include "f_pro.h"
 #include "switch_pro.h"
 
-#define BULK_QLEN 5
 #define BULK_BUF_SIZE 64
 
 struct f_switchpro {
@@ -17,6 +16,8 @@ struct f_switchpro {
 	struct usb_ep				*out_ep;
 	int                 cur_alt;
 };
+
+#include "pro_reply.c"
 
 struct usb_interface_descriptor prog_interface_desc = {
   .bLength             = USB_DT_INTERFACE_SIZE,
@@ -68,6 +69,70 @@ static struct usb_descriptor_header *prog_descriptors[] = {
 	NULL,
 };
 
+
+static void send_report_complete(struct usb_ep *ep, struct usb_request *req) {
+	struct usb_composite_dev	*cdev;
+	struct f_switchpro *sp = ep->driver_data;
+	int status = req->status;
+
+	/* driver_data will be null if ep has been disabled */
+	if (!sp)
+		return;
+
+	cdev = sp->function.config->cdev;
+
+	switch (status) {
+	case 0:				/* normal completion */
+		break;
+
+	/* this endpoint is normally active while we're configured */
+	case -ECONNABORTED:		/* hardware forced ep reset */
+	case -ECONNRESET:		/* request dequeued */
+	case -ESHUTDOWN:		/* disconnect from host */
+		VDBG(cdev, "%s gone (%d), %d/%d\n", ep->name, status,
+				req->actual, req->length);
+		break;
+
+	case -EOVERFLOW:		/* buffer overrun on read means that
+					 * we didn't provide a big enough
+					 * buffer.
+					 */
+	default:
+#if 1
+		DBG(cdev, "%s complete --> %d, %d/%d\n", ep->name,
+				status, req->actual, req->length);
+#endif
+	case -EREMOTEIO:		/* short read */
+		break;
+	}
+
+	free_ep_req(ep, req);
+}
+int send_report(struct f_switchpro *sp, const void *data, int size)
+{
+	struct usb_request *req = alloc_ep_req(sp->in_ep, prog_in_ep_desc.wMaxPacketSize);
+	struct usb_composite_dev *cdev = sp->function.config->cdev;
+	struct usb_ep *ep = sp->in_ep;
+	int status;
+
+	if (req == NULL) {
+		ERROR(cdev, "send_report alloc_ep_req == NULL\n");
+		return -ENOMEM;
+	}
+	memcpy(req->buf, data, size);
+	req->complete = send_report_complete;
+
+	status = usb_ep_queue(ep, req, GFP_ATOMIC);
+	if (status) {
+		ERROR(cdev, "kill %s:  resubmit %d bytes --> %d\n",
+				ep->name, req->length, status);
+		usb_ep_set_halt(ep);
+		/* FIXME recover later ... somehow */
+	}
+
+	return status;
+}
+
 static inline struct f_switchpro *func_to_sp(struct usb_function *f)
 {
 	return container_of(f, struct f_switchpro, function);
@@ -97,7 +162,14 @@ static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 	switch (status) {
 	case 0:				/* normal completion */
 		if (ep == sp->out_ep) {
-			ERROR(cdev, "out_ep\n");
+			u8 *buf = req->buf;
+			status = handle_pro_input(buf, req->length, sp);
+			// ERROR(cdev, "handle_pro_input %02x %02x %d", buf[0], buf[1], status);
+			if (status == -EOPNOTSUPP) {
+				ERROR(cdev, "%02x %02x (%02x) is not supported", buf[0], buf[1], buf[10]);
+			} else if (status) {
+				ERROR(cdev, "%02x %02x error %d", buf[0], buf[1], status);
+			}
 		} else if (ep == sp->in_ep) {
 			// ERROR(cdev, "in_ep\n");
 		}
@@ -138,31 +210,28 @@ static int switch_pro_start_ep(struct f_switchpro *sp, bool is_in)
 {
 	struct usb_ep *ep;
 	struct usb_request *req;
-	int i, size, qlen, status = 0;
+	int size, status = 0;
 
 	ep = is_in ? sp->in_ep : sp->out_ep;
-	qlen = BULK_QLEN;
 	size = BULK_BUF_SIZE;
 
-	for (i = 0; i < qlen; i++) {
-		req = alloc_ep_req(ep, size);
-		if (!req)
-			return -ENOMEM;
+	req = alloc_ep_req(ep, size);
+	if (!req)
+		return -ENOMEM;
 
-		req->complete = switch_pro_complete;
-		memset(req->buf, 0x0, req->length);
+	req->complete = switch_pro_complete;
+	memset(req->buf, 0x0, req->length);
 
-		status = usb_ep_queue(ep, req, GFP_ATOMIC);
-		if (status) {
-			struct usb_composite_dev	*cdev;
+	status = usb_ep_queue(ep, req, GFP_ATOMIC);
+	if (status) {
+		struct usb_composite_dev	*cdev;
 
-			cdev = sp->function.config->cdev;
-			ERROR(cdev, "start %s %s --> %d\n",
-			      is_in ? "IN" : "OUT",
-			      ep->name, status);
-			free_ep_req(ep, req);
-			return status;
-		}
+		cdev = sp->function.config->cdev;
+		ERROR(cdev, "start %s %s --> %d\n",
+					is_in ? "IN" : "OUT",
+					ep->name, status);
+		free_ep_req(ep, req);
+		return status;
 	}
 
 	return status;
