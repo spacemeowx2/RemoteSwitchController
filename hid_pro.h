@@ -129,16 +129,6 @@ struct hid_descriptor prog_desc = {
   .desc[0].wDescriptorLength    = cpu_to_le16(sizeof(pro_hid_report)),
 };
 
-struct usb_endpoint_descriptor prog_out_ep_desc = {
-    .bLength             = USB_DT_ENDPOINT_SIZE,
-    .bDescriptorType     = USB_DT_ENDPOINT,
-    .bEndpointAddress    = USB_DIR_OUT,     // will be overriden
-    .bmAttributes        =
-      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
-    .wMaxPacketSize      = 64,
-    .bInterval           = 8,
-};
-
 struct usb_endpoint_descriptor prog_in_ep_desc = {
     .bLength             = USB_DT_ENDPOINT_SIZE,
     .bDescriptorType     = USB_DT_ENDPOINT,
@@ -149,12 +139,21 @@ struct usb_endpoint_descriptor prog_in_ep_desc = {
     .bInterval           = 8,
 };
 
+struct usb_endpoint_descriptor prog_out_ep_desc = {
+    .bLength             = USB_DT_ENDPOINT_SIZE,
+    .bDescriptorType     = USB_DT_ENDPOINT,
+    .bEndpointAddress    = USB_DIR_OUT,     // will be overriden
+    .bmAttributes        =
+      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+    .wMaxPacketSize      = 64,
+    .bInterval           = 8,
+};
 
 static const struct usb_descriptor_header *prog_descriptors[] = {
 	(struct usb_descriptor_header *)&prog_interface_desc,
 	(struct usb_descriptor_header *)&prog_desc,
-	(struct usb_descriptor_header *)&prog_out_ep_desc,
 	(struct usb_descriptor_header *)&prog_in_ep_desc,
+	(struct usb_descriptor_header *)&prog_out_ep_desc,
 	NULL,
 };
 
