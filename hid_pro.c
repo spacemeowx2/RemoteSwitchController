@@ -45,6 +45,15 @@ static void update_report(void) {
   // do nothing
 }
 
+static void free_ep_req(struct usb_ep *ep, struct usb_request *req) {
+	WARN_ON(req->buf == NULL);
+  if (req->buf) {
+    kfree(req->buf);
+  }
+	req->buf = NULL;
+	usb_ep_free_request(ep, req);
+}
+
 static int get_descriptor(
     struct usb_gadget* gadget, const struct usb_ctrlrequest* r) {
   struct driver_data* data = get_gadget_data(gadget);
@@ -100,27 +109,51 @@ static void setup_complete(struct usb_ep* ep, struct usb_request* r) {
   }
 }
 
-static void report_complete(struct usb_ep* ep, struct usb_request* r) {
+static void report_complete(struct usb_ep* ep, struct usb_request* req) {
   int result;
-  if (r->status) {
+
+  switch (req->status) {
+	case 0:				/* normal completion */
+    update_report();
+    spin_lock(&switch_controller_lock);
+    memcpy(req->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
+    spin_unlock(&switch_controller_lock);
+    req->length = sizeof(switch_controller.bytes);
+		break;
+	/* this endpoint is normally active while we're configured */
+	case -ECONNABORTED:		/* hardware forced ep reset */
+	case -ECONNRESET:		/* request dequeued */
+	case -ESHUTDOWN:		/* disconnect from host */
+		printk("%s: %s gone (%d), %d/%d\n", pro_driver_name,
+      ep->name, req->status,
+      req->actual, req->length);
+		return;
+
+	case -EOVERFLOW:		/* buffer overrun on read means that
+					 * we didn't provide a big enough
+					 * buffer.
+					 */
+	default:
+#if 1
+		printk("%s: %s complete --> %d, %d/%d\n", pro_driver_name, ep->name,
+				req->status, req->actual, req->length);
+#endif
+	case -EREMOTEIO:		/* short read */
+		break;
+  }
+  if (req->status) {
     printk("%s: failed to send a report, suspending\n", pro_driver_name);
     return;
   }
 
-  update_report();
-  spin_lock(&switch_controller_lock);
-  memcpy(r->buf, switch_controller.bytes, sizeof(switch_controller.bytes));
-  spin_unlock(&switch_controller_lock);
-  r->length = sizeof(switch_controller.bytes);
-
-  result = usb_ep_queue(ep, r, GFP_ATOMIC);
+  result = usb_ep_queue(ep, req, GFP_ATOMIC);
   if (result < 0)
     printk("%s: failed to queue a report\n", pro_driver_name);
 }
 
 static void input_complete(struct usb_ep* ep, struct usb_request* r) {
   if (r->status) {
-    printk("%s: failed to recv a report, suspending\n", pro_driver_name);
+    printk("%s: failed to recv a input, suspending\n", pro_driver_name);
     return;
   }
   printk("%s: input_complete", pro_driver_name);
@@ -276,35 +309,25 @@ static void unbind(struct usb_gadget* gadget) {
     usb_ep_disable(data->ep_in);
     data->ep_in->driver_data = NULL;
     data->ep_in->desc = NULL;
-    if (data->ep_in_request) {
-      if (data->ep_in_request->buf)
-        kfree(data->ep_in_request->buf);
-      usb_ep_free_request(data->ep_in, data->ep_in_request);
-    }
+    free_ep_req(data->ep_in, data->ep_in_request);
+    data->ep_in_request = NULL;
   }
   if (data->ep_out) {
     usb_ep_disable(data->ep_out);
     data->ep_out->driver_data = NULL;
     data->ep_out->desc = NULL;
-    if (data->ep_out_request) {
-      if (data->ep_out_request->buf)
-        kfree(data->ep_out_request->buf);
-      usb_ep_free_request(data->ep_out, data->ep_out_request);
-    }
+    free_ep_req(data->ep_out, data->ep_out_request);
+    data->ep_out_request = NULL;
   }
 
-  if (data->ep0_request) {
-    if (data->ep0_request->buf)
-      kfree(data->ep0_request->buf);
-    usb_ep_free_request(gadget->ep0, data->ep0_request);
-  }
+  free_ep_req(gadget->ep0, data->ep0_request);
+  data->ep0_request = NULL;
 
   kfree(data);
   set_gadget_data(gadget, NULL);
 }
 
 static void disconnect(struct usb_gadget* gadget) {
-  int rc;
   struct driver_data* data = get_gadget_data(gadget);
   if (!data)
     return;
@@ -312,15 +335,11 @@ static void disconnect(struct usb_gadget* gadget) {
   printk("%s: disconnect\n", pro_driver_name);
 
   if (data->ep_in_request) {
-    if (data->ep_in_request->buf)
-      kfree(data->ep_in_request->buf);
-    usb_ep_free_request(data->ep_in, data->ep_in_request);
+    free_ep_req(data->ep_in, data->ep_in_request);
     data->ep_in_request = NULL;
   }
   if (data->ep_out_request) {
-    if (data->ep_out_request->buf)
-      kfree(data->ep_out_request->buf);
-    usb_ep_free_request(data->ep_out, data->ep_out_request);
+    free_ep_req(data->ep_out, data->ep_out_request);
     data->ep_out_request = NULL;
   }
   if (data->ep_in) {
