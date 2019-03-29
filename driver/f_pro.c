@@ -9,12 +9,20 @@
 #include "switch_pro.h"
 
 #define BULK_BUF_SIZE 64
+#define COUNTER_INTERVAL 3
+
+enum report_mode {
+	report_none = 0,
+	report_standard = 0x30,
+};
 
 struct f_switchpro {
 	struct usb_function	function;
 	struct usb_ep				*in_ep;
 	struct usb_ep				*out_ep;
 	int                 cur_alt;
+	enum report_mode    mode;
+	int                 counter;
 };
 
 #include "pro_reply.c"
@@ -45,7 +53,7 @@ struct usb_endpoint_descriptor prog_out_ep_desc = {
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_OUT,     // will be overriden
     .bmAttributes        =
-      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+      USB_ENDPOINT_XFER_BULK | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
 };
@@ -55,11 +63,10 @@ struct usb_endpoint_descriptor prog_in_ep_desc = {
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_IN,      // will be overriden
     .bmAttributes        =
-      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+      USB_ENDPOINT_XFER_BULK | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
 };
-
 
 static struct usb_descriptor_header *prog_descriptors[] = {
 	(struct usb_descriptor_header *)&prog_interface_desc,
@@ -69,6 +76,7 @@ static struct usb_descriptor_header *prog_descriptors[] = {
 	NULL,
 };
 
+static int switch_pro_start_ep(struct f_switchpro *sp, bool is_in);
 
 static void send_report_complete(struct usb_ep *ep, struct usb_request *req) {
 	struct usb_composite_dev	*cdev;
@@ -108,18 +116,43 @@ static void send_report_complete(struct usb_ep *ep, struct usb_request *req) {
 
 	free_ep_req(ep, req);
 }
+
+void print_report(const u8* data, int size){
+	int i;
+	char buf[64] = { 0 };
+	
+	for (i = 0; i < size; i++) {
+		sprintf(buf + strlen(buf), "%02x ", data[i]);
+		if ((i % 16) == 15) {
+			printk("%s\n", buf);
+			buf[0] = 0;
+		}
+	}
+	if (strlen(buf)) {
+		printk("%s\n", buf);
+	}
+}
 int send_report(struct f_switchpro *sp, const void *data, int size)
 {
 	struct usb_request *req = alloc_ep_req(sp->in_ep, prog_in_ep_desc.wMaxPacketSize);
 	struct usb_composite_dev *cdev = sp->function.config->cdev;
 	struct usb_ep *ep = sp->in_ep;
+	u8 *view = req->buf;
 	int status;
 
 	if (req == NULL) {
 		ERROR(cdev, "send_report alloc_ep_req == NULL\n");
 		return -ENOMEM;
 	}
+	memset(req->buf, 0x00, prog_in_ep_desc.wMaxPacketSize);
 	memcpy(req->buf, data, size);
+	if (view[0] != 0x81) {
+		view[1] = sp->counter;
+		sp->counter += COUNTER_INTERVAL;
+	}
+
+	print_report(view, prog_in_ep_desc.wMaxPacketSize);
+	
 	req->complete = send_report_complete;
 
 	status = usb_ep_queue(ep, req, GFP_ATOMIC);
@@ -147,6 +180,16 @@ static void disable_ep(struct usb_composite_dev *cdev, struct usb_ep *ep)
 		DBG(cdev, "disable %s --> %d\n", ep->name, value);
 }
 
+static void switch_pro_set_mode(struct f_switchpro *sp, enum report_mode mode)
+{
+	enum report_mode old_mode = sp->mode;
+	sp->mode = mode;
+
+	if (old_mode == report_none) {
+		switch_pro_start_ep(sp, true);
+	}
+}
+
 static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct usb_composite_dev	*cdev;
@@ -163,12 +206,18 @@ static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 	case 0:				/* normal completion */
 		if (ep == sp->out_ep) {
 			u8 *buf = req->buf;
+			ERROR(cdev, "%02x %02x (%02x)\n", buf[0], buf[1], buf[10]);
 			status = handle_pro_input(buf, req->length, sp);
 			// ERROR(cdev, "handle_pro_input %02x %02x %d", buf[0], buf[1], status);
+			switch (status) {
+				case RBEGIN_REPORT_STANDARD:
+					switch_pro_set_mode(sp, report_standard);
+					break;
+			}
 			if (status == -EOPNOTSUPP) {
-				ERROR(cdev, "%02x %02x (%02x) is not supported", buf[0], buf[1], buf[10]);
+				ERROR(cdev, "%02x %02x (%02x) is not supported\n", buf[0], buf[1], buf[10]);
 			} else if (status) {
-				ERROR(cdev, "%02x %02x error %d", buf[0], buf[1], status);
+				ERROR(cdev, "%02x %02x error %d\n", buf[0], buf[1], status);
 			}
 		} else if (ep == sp->in_ep) {
 			// ERROR(cdev, "in_ep\n");
@@ -265,12 +314,14 @@ enable_switch_pro(struct usb_composite_dev *cdev, struct f_switchpro *sp,
 		return result;
 	ep->driver_data = sp;
 
-	result = switch_pro_start_ep(sp, true);
-	if (result < 0) {
-fail:
-		ep = sp->in_ep;
-		usb_ep_disable(ep);
-		return result;
+	if (sp->mode != report_none) {
+		result = switch_pro_start_ep(sp, true);
+		if (result < 0) {
+	fail:
+			ep = sp->in_ep;
+			usb_ep_disable(ep);
+			return result;
+		}
 	}
 
 	/* one bulk endpoint reads (sinks) anything OUT (from the host) */
@@ -326,6 +377,8 @@ autoconf_fail:
 
 	if (ret)
 		return ret;
+
+	sp->mode = report_none;
 
 	return 0;
 }
