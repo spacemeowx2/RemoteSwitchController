@@ -3,7 +3,7 @@
 #define UNUSED(x) (void)(x)
 
 static uint8_t reply_8101[] = {
-	0x81, 0x01, 0x00, 0x03, 0x2b, 0x3c, 0x43, 0xd6, 0x03, 0x04
+	0x81, 0x01, 0x00, 0x03, 0x2b, 0x3c, 0x42, 0xd6, 0x03, 0x04
 };
 
 static uint8_t reply_8102[] = {
@@ -24,11 +24,27 @@ uint8_t input_reply_21[0x40] = {
 };
 
 static uint8_t reply_02_data[] = {
-	0x00, 0x82, 0x02, 0x03, 0x48, 0x03, 0x02, 0x04, 0x03, 0xD6, 0x1B, 0x27, 0x6C, 0x03, 0x01
+	0x00, 0x82, 0x02, 0x03, 0x48, 0x03, 0x02, 0x04, 0x03, 0xD6, 0x42, 0x3c, 0x2b, 0x03, 0x01
 };
 
 static const uint8_t reply_03_data[] = {
   0x00, 0x80, 0x03
+};
+
+static const uint8_t reply_40_data[] = {
+  0x00, 0x80, 0x40
+};
+
+static const uint8_t reply_41_data[] = {
+  0x00, 0x80, 0x41
+};
+
+static const uint8_t reply_30_data[] = {
+  0x00, 0x80, 0x30
+};
+
+static const uint8_t reply_38_data[] = {
+  0x00, 0x80, 0x38
 };
 
 static const uint8_t reply_08_data[] = {
@@ -44,18 +60,30 @@ static uint8_t reply_10_data[] = {
   0x00, 0x00, 0x00
 };
 
+const uint8_t reply_01_04_data[] = {
+	0x00, 0x81, 0x01, 0x03
+};
+
 static const uint8_t reply_48_data[] = {
   0x00, 0x80, 0x48
 };
 
-static const u8 spi_flash_60[] = {
+static const u8 spi_flash_6000[] = {
+  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+  0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
+};
+
+static const u8 spi_flash_6050[] = {
+  0x32, 0x32, 0x32,
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
   0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
 
 static int handle_spi_flash_read(u32 address, u8 len, u8 *data) {
-  if (address == 0x60) {
-    memcpy(data, spi_flash_60, len);
+  if (address == 0x6000) {
+    memcpy(data, spi_flash_6000, len);
+  } else if (address == 0x6050) {
+    memcpy(data, spi_flash_6050, len);
   }
   return 0;
 }
@@ -89,12 +117,13 @@ static int handle_subcommand_input(u8 subcommand, const u8 *sub_data, u16 sub_le
     }
     // SPI flash read
     case 0x10: {
-      u32 address = *(u32*)(sub_data + 1);
-      u8 len = sub_data[5];
+      u32 address = *(u32*)(sub_data);
+      u8 len = sub_data[4];
 
+      // printk("pro_reply: %02x %02x %02x %02x %02x %02x", sub_data[0], sub_data[1], sub_data[2], sub_data[3], sub_data[4], sub_data[5], sub_data[6]);
       printk("pro_reply: SPI flash read: %08x %d", address, len);
       handle_spi_flash_read(address, len, reply_10_data + 8);
-      memcpy(reply_10_data + 3, sub_data + 1, 4 + 1); // address, len
+      memcpy(reply_10_data + 3, sub_data, 4 + 1); // address, len
       reply = reply_10_data;
       reply_len = sizeof(reply_10_data);
       break;
@@ -103,6 +132,29 @@ static int handle_subcommand_input(u8 subcommand, const u8 *sub_data, u16 sub_le
     case 0x48: {
       reply = reply_48_data;
       reply_len = sizeof(reply_48_data);
+      break;
+    }
+    case 0x01: {
+      break;
+    }
+    case 0x40: {
+      reply = reply_40_data;
+      reply_len = sizeof(reply_40_data);
+      break;
+    }
+    case 0x41: {
+      reply = reply_41_data;
+      reply_len = sizeof(reply_41_data);
+      break;
+    }
+    case 0x30: {
+      reply = reply_30_data;
+      reply_len = sizeof(reply_30_data);
+      break;
+    }
+    case 0x38: {
+      reply = reply_38_data;
+      reply_len = sizeof(reply_38_data);
       break;
     }
     default: {

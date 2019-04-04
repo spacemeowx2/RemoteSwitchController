@@ -102,6 +102,11 @@ fail:
 
 
 static int gsp_unbind(struct usb_composite_dev *cdev) {
+	if (!IS_ERR_OR_NULL(func_sp)) {
+		func_sp->free_func(func_sp);
+		func_sp = NULL;
+	}
+	func_inst_sp->free_func_inst(func_inst_sp);
     return 0;
 }
 

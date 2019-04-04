@@ -16,6 +16,13 @@ enum report_mode {
 	report_standard = 0x30,
 };
 
+uint8_t input_reply_30[] = {
+	0x30, 0x00, 0x91, 0x00, 0x80, 0x00, 0x19, 0x68, 0x73, 0x3e, 0xa8, 0x73, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
 struct f_switchpro {
 	struct usb_function	function;
 	struct usb_ep				*in_ep;
@@ -23,6 +30,10 @@ struct f_switchpro {
 	int                 cur_alt;
 	enum report_mode    mode;
 	int                 counter;
+	struct task_struct* recv_task;
+	struct task_struct* report_task;
+	spinlock_t 					report_lock;
+	u8 									report_data[64];
 };
 
 #include "pro_reply.c"
@@ -53,7 +64,7 @@ struct usb_endpoint_descriptor prog_out_ep_desc = {
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_OUT,     // will be overriden
     .bmAttributes        =
-      USB_ENDPOINT_XFER_BULK | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
 };
@@ -63,7 +74,7 @@ struct usb_endpoint_descriptor prog_in_ep_desc = {
     .bDescriptorType     = USB_DT_ENDPOINT,
     .bEndpointAddress    = USB_DIR_IN,      // will be overriden
     .bmAttributes        =
-      USB_ENDPOINT_XFER_BULK | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
+      USB_ENDPOINT_XFER_INT | USB_ENDPOINT_SYNC_NONE | USB_ENDPOINT_USAGE_DATA,
     .wMaxPacketSize      = 64,
     .bInterval           = 8,
 };
@@ -151,8 +162,10 @@ int send_report(struct f_switchpro *sp, const void *data, int size)
 		sp->counter += COUNTER_INTERVAL;
 	}
 
-	print_report(view, prog_in_ep_desc.wMaxPacketSize);
-	
+	if (view[0] != 0x30) {
+		print_report(view, prog_in_ep_desc.wMaxPacketSize);
+	}
+
 	req->complete = send_report_complete;
 
 	status = usb_ep_queue(ep, req, GFP_ATOMIC);
@@ -347,6 +360,92 @@ enable_switch_pro(struct usb_composite_dev *cdev, struct f_switchpro *sp,
 	return result;
 }
 
+static int switchpro_report_func(void *data) {
+	struct f_switchpro *sp = data;
+
+	while (!kthread_should_stop()) {
+		usleep_range(16000, 16666);
+
+		if (sp->mode == report_standard) {
+			// printk("report");
+      spin_lock(&sp->report_lock);
+			memcpy(sp->report_data, input_reply_30, sizeof(sp->report_data));
+			send_report(sp, sp->report_data, sizeof(sp->report_data));
+      spin_unlock(&sp->report_lock);
+		}
+	}
+
+	return 0;
+}
+
+static int switchpro_recv_func(void *data) {
+	struct f_switchpro *sp = data;
+  const int BUF_LEN = 64;
+  struct socket *sock = NULL;
+  struct sockaddr_in s_addr;
+  unsigned short portnum = 0x8888;
+  int ret = 0;
+  int opt;
+  struct timeval tv;
+  char recvbuf[BUF_LEN];
+  struct kvec vec;
+  struct msghdr msg;
+
+  memset(&s_addr, 0, sizeof(s_addr));
+  s_addr.sin_family = AF_INET;
+  s_addr.sin_port = htons(portnum);
+  s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  /*create a socket*/
+  ret = sock_create_kern(&init_net, PF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock);
+  if (ret) {
+    printk("server:socket_create error!\n");
+    return -1;
+  }
+  printk("server: socket_create ok!\n");
+
+  opt = 1;
+  ret = kernel_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
+  if (ret) {
+    printk("SO_REUSEADDR error %d\n", ret);
+    return ret;
+  }
+
+  tv.tv_sec = 1;
+  tv.tv_usec = 0; // 10 * 1000; // 10ms
+  ret = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv));
+  if (ret) {
+    printk("SO_RCVTIMEO error %d\n", ret);
+    return ret;
+  }
+
+  /*bind the socket*/
+  ret = sock->ops->bind(sock, (struct sockaddr *)&s_addr, sizeof(s_addr));
+  if (ret < 0) {
+    printk("server: bind error\n");
+    return ret;
+  }
+  printk("server: bind ok!\n");
+
+  while (!kthread_should_stop()) {
+    memset(recvbuf, 0, BUF_LEN);
+    memset(&vec, 0, sizeof(vec));
+    memset(&msg, 0, sizeof(msg));
+    vec.iov_base = recvbuf;
+    vec.iov_len = BUF_LEN;
+    ret = kernel_recvmsg(sock, &msg, &vec, 1, vec.iov_len, 0); /*receive message*/
+    if (ret > 0) {
+      spin_lock(&sp->report_lock);
+      memcpy(sp->report_data, recvbuf, sizeof(sp->report_data));
+      spin_unlock(&sp->report_lock);
+    }
+  }
+
+  /*release socket*/
+  sock_release(sock);
+  return 0;
+}
+
 static int switchpro_bind(struct usb_configuration *c, struct usb_function *f) {
 	struct usb_composite_dev *cdev = c->cdev;
 	struct f_switchpro *sp = func_to_sp(f);
@@ -381,16 +480,6 @@ autoconf_fail:
 	sp->mode = report_none;
 
 	return 0;
-}
-
-static void switchpro_free_func(struct usb_function *f)
-{
-	struct f_opts *opts;
-
-	opts = container_of(f->fi, struct f_opts, func_inst);
-
-	usb_free_all_descriptors(f);
-	kfree(func_to_sp(f));
 }
 
 static int switchpro_set_alt(struct usb_function *f,
@@ -484,6 +573,22 @@ respond:
 	return value;
 }
 
+static void switchpro_free_func(struct usb_function *f)
+{
+	struct f_opts *opts;
+	struct f_switchpro *sp = func_to_sp(f);
+
+	printk("switchpro_free_func\n");
+
+	opts = container_of(f->fi, struct f_opts, func_inst);
+
+	kthread_stop(sp->report_task);
+	kthread_stop(sp->recv_task);
+
+	usb_free_all_descriptors(f);
+	kfree(sp);
+}
+
 static struct usb_function *switch_pro_alloc_func(
 		struct usb_function_instance *fi)
 {
@@ -504,6 +609,10 @@ static struct usb_function *switch_pro_alloc_func(
 	sp->function.setup = switchpro_setup;
 
 	sp->function.free_func = switchpro_free_func;
+
+	spin_lock_init(&sp->report_lock);
+	sp->recv_task = kthread_run(switchpro_recv_func, sp, "recv_func");
+	sp->report_task = kthread_run(switchpro_report_func, sp, "report_func");
 
 	return &sp->function;
 }
