@@ -39,6 +39,10 @@ static const uint8_t reply_41_data[] = {
   0x00, 0x80, 0x41
 };
 
+static const uint8_t reply_04_data[] = {
+	0x00, 0x83, 0x04
+};
+
 static const uint8_t reply_30_data[] = {
   0x00, 0x80, 0x30
 };
@@ -135,6 +139,8 @@ static int handle_subcommand_input(u8 subcommand, const u8 *sub_data, u16 sub_le
       break;
     }
     case 0x01: {
+      reply = reply_01_04_data;
+      reply_len = sizeof(reply_01_04_data);
       break;
     }
     case 0x40: {
@@ -155,6 +161,11 @@ static int handle_subcommand_input(u8 subcommand, const u8 *sub_data, u16 sub_le
     case 0x38: {
       reply = reply_38_data;
       reply_len = sizeof(reply_38_data);
+      break;
+    }
+    case 0x04: {
+      reply = reply_04_data;
+      reply_len = sizeof(reply_04_data);
       break;
     }
     default: {
@@ -201,6 +212,9 @@ static int handle_pro_input(const u8 *input, u16 input_len, struct f_switchpro *
     UNUSED(counter);
 
     return handle_subcommand_input(subcommand, sub_data, sub_len, sp);
+  } else if (input[0] == 0x10) {
+    // rumble only
+    return 0; // skip it
   }
 
   return -EOPNOTSUPP;
