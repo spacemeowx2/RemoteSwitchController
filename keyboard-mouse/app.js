@@ -37,31 +37,16 @@ class AnalogStick {
         return this._y
     }
     toBytes () {
-        return [Math.ceil(this.x * 255), Math.ceil(this.y * 255)]
+        // 2^12 = 4096
+        const x = Math.ceil(this.x * 4095)
+        const y = Math.ceil(this.y * 4095)
+
+        const data = [x & 0xFF, ((y & 0xF) << 8) | ((x >> 8) & 0xF), y >> 4]
+
+        return data
     }
 }
-/**
- *      self.Y = 0
-        self.B = 0
-        self.A = 0
-        self.X = 0
-        self.L = 0
-        self.R = 0
-        self.ZL = 0
-        self.ZR = 0
 
-        self.minus = 0    8
-        self.plus = 0
-        self.lclick = 0
-        self.rclick = 0
-        self.home = 0
-        self.capture = 0
-
-        self.d_up = 0     15
-        self.d_down = 0
-        self.d_right = 0
-        self.d_left = 0
- */
 const hatMap = [
     [7,0,1],
     [6,8,2],
@@ -70,7 +55,7 @@ const hatMap = [
 class PadButton {
     constructor () {
         this.btns = []
-        for (let i = 0; i < 14; i++) {
+        for (let i = 0; i < 22; i++) {
             this.btns.push(0)
         }
     }
@@ -83,26 +68,24 @@ class PadButton {
         for (let i = 0; i < 6; i++) {
             byte2 |=  (btns[i + 8] & 1) << i
         }
-        let x = 1, y = 1
-        y -= btns[14] & 1
-        y += btns[15] & 1
-        x += btns[16] & 1
-        x -= btns[17] & 1
-        byte3 = hatMap[y][x]
+        for (let i = 0; i < 8; i++) {
+            byte3 |=  (btns[i + 8 + 6] & 1) << i
+        }
         return [byte1, byte2, byte3]
     }
 }
-class MouseStick {
-    constructor (analogStick) {
-        this.stick = analogStick
+class MouseSixAxis {
+    constructor (sixAxis) {
+        this.sixAxis = sixAxis
         this.rX = 0
         this.rY = 0
         this.lt = performance.now()
         this.ds = []
     }
     onMove (x, y) {
-        this.rX += x / 2
-        this.rY += y / 1.5
+        this.rX += x
+        this.rY += y
+        this.sixAxis.x
         const MAX = 400
         if (this.rX > MAX) {
             this.rX = MAX
@@ -114,44 +97,29 @@ class MouseStick {
         } else if (this.rY < -MAX) {
             this.rY = -MAX
         }
+        this.sixAxis.x = x
+        this.sixAxis.y = y
     }
-    onSend () {
-        const now = performance.now()
-        const delta = (now - this.lt) / 100
-        this.ds.push(delta)
-        if (this.ds.length > 60) {
-            this.ds.shift()
-        }
-        const avgDelta = this.ds.reduce((a, b) => a + b) / this.ds.length
-        const _o2v = o => -0.0002 * o * o * o + 0.0335 * o * o + 1.1722 * o
-        const o2v = o => o < 0 ? -_o2v(-o) : _o2v(o)
+}
+class SixAxis {
+    constructor () {
+        this.history = [
+            [0, 0, 0, 0, 0, 0]
+            [0, 0, 0, 0, 0, 0]
+        ]
+        this.x = 0
+        this.y = 0
+        this.z = 0
+    }
+    toBytes () {
+        const cur = [0, 0, 0, this.x, this.y, this.z]
+        this.x = this.y = this.z = 0
 
-        const dx = o2v((this.stick.x - 0.5) * 256) * delta
-        const dy = o2v((this.stick.y - 0.5) * 256) * delta
-        if (dx < Math.abs(this.rX)) {
-            this.rX -= dx
-        } else {
-            this.rX = 0
-        }
-        if (dy < Math.abs(this.rY)) {
-            this.rY -= dy
-        } else {
-            this.rY = 0
-        }
-//    offset
-// 128 - 10, 10s 144°
-// 128 - 20, 10s 360°
-// 128 - 40, 10s 720° + 180° = 900°
-// 128 - 60, 10s 4 * 360 + 90 =  1530°
-// 128 - 80, 10s 6 * 360 + 90 =  2250°
-        if (this.rX != 0) {
-            this.stick.x = this.rX / 100 + 0.5
-        }
-        if (this.rY != 0) {
-            this.stick.y = this.rY / 100 + 0.5
-        }
-
-        this.lt = now
+        const { history } = this
+        const dat = new Int16Array([cur, ...history])
+        history[1] = history[0]
+        history[0] = cur
+        return [...new Uint8Array(dat.buffer)]
     }
 }
 class Gamepad {
@@ -160,34 +128,38 @@ class Gamepad {
         this.pad = pad
         this.ls = new AnalogStick($('#l-stick'))
         this.rs = new AnalogStick($('#r-stick'))
-        this.ms = new MouseStick(this.rs)
+        this.sixAxis = new SixAxis()
+        this.ms = new MouseSixAxis(this.sixAxis)
         this.lockMouse = false
         this.ws = ws
         this.button = new PadButton()
         this.btnMap = new Map([
-            [73, 14], // ijkl, dpad
-            [75, 15],
+            [73, 15], // ijkl, dpad
+            [75, 14],
             [76, 16],
             [74, 17],
 
-            [32, 1],   // space, B
-            [70, 5],   // f, R
-            [82, 3],   // r, X
-            [88, 3],   // x, X
+            [32, 2],   // space, B
+            [70, 6],   // f, R
+            [82, 1],   // r, X
+            [88, 1],   // x, X
             [49, 8],   // 1, -
             [50, 9],   // 2, +
-            [81, 11],  // q, RClick
+            [81, 10],  // q, RClick
             [89, 0],   // y, Y
-            [69, 2],   // e, A
-            [66, 1],   // b, B
+            [69, 3],   // e, A
+            [66, 2],   // b, B
+
+            [72, 12],  // h, HOME
+            [80, 13],  // p, CAPTURE
         ])
         this.mouseBtnMap = new Map([
-            [0, 7],
-            [2, 6]
+            [0, 7],    // ZR
+            [2, 21]     // ZL
         ])
         this.fakeLSMap = new Map([
-            [87, [ 0, -1]],
-            [83, [ 0,  1]],
+            [87, [ 0,  1]],
+            [83, [ 0, -1]],
             [68, [ 1,  0]],
             [65, [-1,  0]]
         ])
@@ -271,10 +243,16 @@ class Gamepad {
         this.ms.onMove(x, y)
     }
     send () {
-        const bytes = [...this.button.toBytes(), ...this.ls.toBytes(), ...this.rs.toBytes(), 0]
+        const bytes = [
+            0x30, 0x00, 0x91,
+            ...this.button.toBytes(),
+            ...this.ls.toBytes(),
+            ...this.rs.toBytes(),
+            0x00,
+            ...this.sixAxis.toBytes()
+        ]
         const u8 = new Uint8Array(bytes)
         this.ws.send(u8.buffer)
-        this.ms.onSend()
     }
 }
 let ws = new WebSocket('ws://localhost:26214')

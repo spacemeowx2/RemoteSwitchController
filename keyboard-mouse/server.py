@@ -1,6 +1,6 @@
 from websocket_server import WebsocketServer
 from socket import *
-addr = ('192.168.233.135', 34952)
+addr = ('192.168.233.130', 34952)
 udpClient = socket(AF_INET, SOCK_DGRAM)
 
 def recv_message(client, server, message):

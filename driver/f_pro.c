@@ -369,8 +369,6 @@ static int switchpro_report_func(void *data) {
 		if (sp->mode == report_standard) {
 			// printk("report");
       spin_lock(&sp->report_lock);
-			input_reply_30[3] += 1;
-			memcpy(sp->report_data, input_reply_30, sizeof(sp->report_data));
 			send_report(sp, sp->report_data, sizeof(sp->report_data));
       spin_unlock(&sp->report_lock);
 		}
@@ -614,6 +612,8 @@ static struct usb_function *switch_pro_alloc_func(
 	spin_lock_init(&sp->report_lock);
 	sp->recv_task = kthread_run(switchpro_recv_func, sp, "recv_func");
 	sp->report_task = kthread_run(switchpro_report_func, sp, "report_func");
+
+	memcpy(sp->report_data, input_reply_30, sizeof(input_reply_30));
 
 	return &sp->function;
 }
