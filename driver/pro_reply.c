@@ -99,8 +99,10 @@ static int handle_subcommand_input(u8 subcommand, const u8 *sub_data, u16 sub_le
   int result = 0;
   int val;
 
+#ifdef DEBUG
   printk("pro_reply: subcommand: %02x [%02x, %02x, %02x, %02x]",
     subcommand, sub_data[0], sub_data[1], sub_data[2], sub_data[3]);
+#endif
 
   switch (subcommand) {
     case 0x03: {

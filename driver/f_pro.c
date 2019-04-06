@@ -33,7 +33,10 @@ struct f_switchpro {
 	struct task_struct* recv_task;
 	struct task_struct* report_task;
 	spinlock_t 					report_lock;
-	u8 									report_data[64];
+	u8 									report_data[BULK_BUF_SIZE];
+	int16_t							mouse_x;
+	int16_t							mouse_y;
+	bool								calc_mouse;
 };
 
 #include "pro_reply.c"
@@ -143,6 +146,27 @@ void print_report(const u8* data, int size){
 		printk("%s\n", buf);
 	}
 }
+
+void data_to_report(struct f_switchpro *sp, const u8 *data, int size)
+{
+	u8 *view = sp->report_data;
+
+	if (data[0] == 0x30 && size == BULK_BUF_SIZE) {
+		memcpy(view, data, size);
+	} else if (data[0] == 0xFF) {
+		if (data[1] == 0x30) {
+			view[0] = 0x30;
+			view[1] = 0x00;
+			view[2] = 0x91;
+			memcpy(&view[3], &data[2], 9);
+			view[12] = 0x00;
+			sp->mouse_x += *(int16_t *)(data + 11);
+			sp->mouse_y += *(int16_t *)(data + 13);
+			sp->calc_mouse = true;
+		}
+	}
+}
+
 int send_report(struct f_switchpro *sp, const void *data, int size)
 {
 	struct usb_request *req = alloc_ep_req(sp->in_ep, prog_in_ep_desc.wMaxPacketSize);
@@ -162,7 +186,7 @@ int send_report(struct f_switchpro *sp, const void *data, int size)
 		sp->counter += COUNTER_INTERVAL;
 	}
 
-	if (view[0] != 0x30) {
+	if (view[0] != 0x30 && view[0] != 0x21) {
 		print_report(view, prog_in_ep_desc.wMaxPacketSize);
 	}
 
@@ -219,7 +243,9 @@ static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 	case 0:				/* normal completion */
 		if (ep == sp->out_ep) {
 			u8 *buf = req->buf;
+#ifdef DEBUG
 			ERROR(cdev, "%02x %02x (%02x)\n", buf[0], buf[1], buf[10]);
+#endif
 			status = handle_pro_input(buf, req->length, sp);
 			// ERROR(cdev, "handle_pro_input %02x %02x %d", buf[0], buf[1], status);
 			switch (status) {
@@ -234,6 +260,8 @@ static void switch_pro_complete(struct usb_ep *ep, struct usb_request *req)
 			}
 		} else if (ep == sp->in_ep) {
 			// ERROR(cdev, "in_ep\n");
+			free_ep_req(ep, req);
+			return;
 		}
 		break;
 
@@ -362,6 +390,8 @@ enable_switch_pro(struct usb_composite_dev *cdev, struct f_switchpro *sp,
 
 static int switchpro_report_func(void *data) {
 	struct f_switchpro *sp = data;
+	int i;
+	int16_t *six_axis;
 
 	while (!kthread_should_stop()) {
 		usleep_range(16000, 16666);
@@ -369,6 +399,21 @@ static int switchpro_report_func(void *data) {
 		if (sp->mode == report_standard) {
 			// printk("report");
       spin_lock(&sp->report_lock);
+			if (sp->calc_mouse) {
+				six_axis = (int16_t *)(sp->report_data + 13);
+				for (i = 0; i < 3; i++) {
+					six_axis[0] = 0;
+					six_axis[1] = 0;
+					six_axis[2] = 1;
+					six_axis[3] = 0;
+					six_axis[4] = sp->mouse_y;
+					six_axis[5] = -sp->mouse_x;
+					six_axis += 6;
+				}
+				memset(sp->report_data + 13 + 36, 0, 15);
+				sp->mouse_x = sp->mouse_y = 0;
+				sp->calc_mouse = false;
+			}
 			send_report(sp, sp->report_data, sizeof(sp->report_data));
       spin_unlock(&sp->report_lock);
 		}
@@ -386,7 +431,7 @@ static int switchpro_recv_func(void *data) {
   int ret = 0;
   int opt;
   struct timeval tv;
-  char recvbuf[BUF_LEN];
+  u8 recvbuf[BUF_LEN];
   struct kvec vec;
   struct msghdr msg;
 
@@ -410,8 +455,8 @@ static int switchpro_recv_func(void *data) {
     return ret;
   }
 
-  tv.tv_sec = 1;
-  tv.tv_usec = 0; // 10 * 1000; // 10ms
+  tv.tv_sec = 0;
+  tv.tv_usec = 15 * 1000; // 10 * 1000; // 10ms
   ret = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv));
   if (ret) {
     printk("SO_RCVTIMEO error %d\n", ret);
@@ -435,7 +480,7 @@ static int switchpro_recv_func(void *data) {
     ret = kernel_recvmsg(sock, &msg, &vec, 1, vec.iov_len, 0); /*receive message*/
     if (ret > 0) {
       spin_lock(&sp->report_lock);
-      memcpy(sp->report_data, recvbuf, sizeof(sp->report_data));
+			data_to_report(sp, recvbuf, ret);
       spin_unlock(&sp->report_lock);
     }
   }

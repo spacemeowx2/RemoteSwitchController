@@ -85,8 +85,7 @@ class MouseSixAxis {
     onMove (x, y) {
         this.rX += x
         this.rY += y
-        this.sixAxis.x
-        const MAX = 400
+        const MAX = 800
         if (this.rX > MAX) {
             this.rX = MAX
         } else if (this.rX < -MAX) {
@@ -97,28 +96,68 @@ class MouseSixAxis {
         } else if (this.rY < -MAX) {
             this.rY = -MAX
         }
-        this.sixAxis.x = x
-        this.sixAxis.y = y
+    }
+    onSend () {
+        const A = 25
+        const x = this.rX * A
+        const y = this.rY * A
+        this.rX = this.rY = 0
+
+        this.sixAxis.gy = y
+        this.sixAxis.gz = -x
+        // console.log(x, y, this.sixAxis.gz, this.sixAxis.gy)
+        this.sixAxis.update()
     }
 }
 class SixAxis {
-    constructor () {
-        this.history = [
-            [0, 0, 0, 0, 0, 0]
+    constructor (elem) {
+        this.elem = elem
+        this.data = [
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0]
         ]
-        this.x = 0
-        this.y = 0
-        this.z = 0
+        this.gx = 0
+        this.gy = 0
+        this.gz = 0
+
+        this.ax = 0
+        this.ay = 0
+        this.az = 0
+
+        const keys = ['ax', 'ay', 'az', 'gx', 'gy', 'gz']
+        for (let k of keys) {
+            const e = document.getElementById(k)
+            e.addEventListener('input', _ => {
+                this[k] = parseInt(e.value)
+            })
+            this[k] = parseInt(e.value)
+        }
+    }
+    update () {
+        const cur = [
+            this.ax, this.ay, this.az,
+            this.gx, this.gy, this.gz
+        ]
+        // this.gx = this.gy = this.gz = 0
+        // this.ax = this.ay = this.az = 0
+
+        const { data } = this
+        data[2] = data[1]
+        data[1] = data[0]
+        data[0] = cur
+
+        const fields = ['ax', 'ay', 'az', 'gx', 'gy', 'gz']
+        const vs = new Int16Array(cur)
+        let s = []
+        for (let i = 0; i < fields.length; i++) {
+            s.push(`${fields[i]}: ${vs[i]}`)
+        }
+        this.elem.innerText = s.join('\n')
     }
     toBytes () {
-        const cur = [0, 0, 0, this.x, this.y, this.z]
-        this.x = this.y = this.z = 0
-
-        const { history } = this
-        const dat = new Int16Array([cur, ...history])
-        history[1] = history[0]
-        history[0] = cur
+        const { data } = this
+        const dat = new Int16Array([...data[0], ...data[1], ...data[2]])
         return [...new Uint8Array(dat.buffer)]
     }
 }
@@ -128,7 +167,7 @@ class Gamepad {
         this.pad = pad
         this.ls = new AnalogStick($('#l-stick'))
         this.rs = new AnalogStick($('#r-stick'))
-        this.sixAxis = new SixAxis()
+        this.sixAxis = new SixAxis($('#six-axis'))
         this.ms = new MouseSixAxis(this.sixAxis)
         this.lockMouse = false
         this.ws = ws
@@ -167,7 +206,7 @@ class Gamepad {
         this.rX = 0
         this.rY = 0
 
-        setInterval(() => this.send(), 1)
+        setTimeout(() => this.send(), 1)
     }
     bind (ipt) {
         this.ipt = ipt
@@ -241,22 +280,57 @@ class Gamepad {
     }
     onMove (x, y) {
         this.ms.onMove(x, y)
+        this.rX += x
+        this.rY += y
+    }
+    mouseToBytes () {
+        const ary = new Int16Array([this.rX * 20, this.rY * 20])
+        this.rX = this.rY = 0
+        return [...new Uint8Array(ary.buffer)]
     }
     send () {
+        // const bytes = [
+        //     0x30, 0x00, 0x91,
+        //     ...this.button.toBytes(),
+        //     ...this.ls.toBytes(),
+        //     ...this.rs.toBytes(),
+        //     0x00,
+        //     ...this.sixAxis.toBytes(),
+        //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        //     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        // ]
         const bytes = [
-            0x30, 0x00, 0x91,
+            0xFF, 0x30,
             ...this.button.toBytes(),
             ...this.ls.toBytes(),
             ...this.rs.toBytes(),
-            0x00,
-            ...this.sixAxis.toBytes()
+            ...this.mouseToBytes()
         ]
         const u8 = new Uint8Array(bytes)
         this.ws.send(u8.buffer)
+        this.ms.onSend()
+
+        setTimeout(() => this.send(), 1)
     }
 }
 let ws = new WebSocket('ws://localhost:26214')
 ws.onopen = () => {
     let gamepad = new Gamepad(document.querySelector('.gamepad'), ws)
     gamepad.bind(document.querySelector('#input'))
+    let timer = null
+    window.autoA = () => {
+        let a = true
+        if (timer) {
+            clearInterval(timer)
+        }
+        timer = setInterval(() => {
+            if (a) {
+                gamepad.onKeyDown(69)
+            } else {
+                gamepad.onKeyUp(69)
+            }
+            a = !a
+        }, 100)
+    }
+    window.cancelA = () => clearInterval(timer)
 }
