@@ -8,7 +8,7 @@ class AnalogStick {
     }
     move () {
         this.p.style.left = `${this.x * 80}px`
-        this.p.style.top = `${this.y * 80}px`
+        this.p.style.top = `${(1 - this.y) * 80}px`
     }
     set x (v) {
         if (v > 1) {
@@ -206,7 +206,7 @@ class Gamepad {
         this.rX = 0
         this.rY = 0
 
-        setTimeout(() => this.send(), 1)
+        setTimeout(() => this.send(), 10)
     }
     bind (ipt) {
         this.ipt = ipt
@@ -284,7 +284,10 @@ class Gamepad {
         this.rY += y
     }
     mouseToBytes () {
-        const ary = new Int16Array([this.rX * 20, this.rY * 20])
+        const x = this.rX * 20
+        const y = this.rY * 20
+        const ary = new Int16Array([x, y])
+
         this.rX = this.rY = 0
         return [...new Uint8Array(ary.buffer)]
     }
@@ -309,8 +312,7 @@ class Gamepad {
         const u8 = new Uint8Array(bytes)
         this.ws.send(u8.buffer)
         this.ms.onSend()
-
-        setTimeout(() => this.send(), 1)
+        setTimeout(() => this.send(), 30)
     }
 }
 let ws = new WebSocket('ws://localhost:26214')
