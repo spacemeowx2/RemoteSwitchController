@@ -1,3 +1,8 @@
+function clamp(v, l, r) {
+    if (v < l) return l
+    if (v > r) return r
+    return v
+}
 class AnalogStick {
     constructor (elem) {
         this.el = elem
@@ -98,11 +103,12 @@ class MouseSixAxis {
         }
     }
     onSend () {
-        const A = 25
+        const A = 50
         const x = this.rX * A
         const y = this.rY * A
         this.rX = this.rY = 0
 
+        // this.sixAxis.az = 4100
         this.sixAxis.gy = y
         this.sixAxis.gz = -x
         // console.log(x, y, this.sixAxis.gz, this.sixAxis.gy)
@@ -135,9 +141,13 @@ class SixAxis {
         }
     }
     update () {
+        const noiseX = Math.random() * 50 - 25
+        const noiseZ = Math.random() * 50 - 25
+        this.gy = clamp(this.gy, -30000, 30000)
+        this.gz = clamp(this.gz, -30000, 30000)
         const cur = [
             this.ax, this.ay, this.az,
-            this.gx, this.gy, this.gz
+            this.gx, this.gy + noiseX, this.gz + noiseZ
         ]
         // this.gx = this.gy = this.gz = 0
         // this.ax = this.ay = this.az = 0
@@ -312,7 +322,7 @@ class Gamepad {
         const u8 = new Uint8Array(bytes)
         this.ws.send(u8.buffer)
         this.ms.onSend()
-        setTimeout(() => this.send(), 30)
+        setTimeout(() => this.send(), 15)
     }
 }
 let ws = new WebSocket('ws://localhost:26214')

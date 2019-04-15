@@ -399,8 +399,8 @@ static int switchpro_report_func(void *data) {
 		if (sp->mode == report_standard) {
 			// printk("report");
       spin_lock(&sp->report_lock);
+			six_axis = (int16_t *)(sp->report_data + 13);
 			if (sp->calc_mouse) {
-				six_axis = (int16_t *)(sp->report_data + 13);
 				for (i = 0; i < 3; i++) {
 					six_axis[0] = 0;
 					six_axis[1] = 0;
@@ -415,6 +415,15 @@ static int switchpro_report_func(void *data) {
 				sp->calc_mouse = false;
 			}
 			send_report(sp, sp->report_data, sizeof(sp->report_data));
+
+			// reset gyro to avoid rotating too much
+			six_axis = (int16_t *)(sp->report_data + 13);
+			for (i = 0; i < 3; i++) {
+				six_axis[3] = 0;
+				six_axis[4] = 0;
+				six_axis[5] = 0;
+				six_axis += 6;
+			}
       spin_unlock(&sp->report_lock);
 		}
 	}
