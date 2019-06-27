@@ -1,0 +1,18 @@
+{
+  "name": "splatoon-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "@types/node": "^11.13.2",
+    "ts-node": "^8.0.3",
+    "typescript": "^3.4.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
