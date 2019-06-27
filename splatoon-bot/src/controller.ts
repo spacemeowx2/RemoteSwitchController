@@ -24,7 +24,7 @@ export class ProUDPTransport extends ProTransport {
         this.socket.send(new Uint8Array(buf), this.port, this.address)
     }
 }
-const enum ButtonBitMap {
+export const enum ButtonBitMap {
     Y = 0,
     X = 1,
     B = 2,
@@ -52,7 +52,7 @@ const enum ButtonBitMap {
     L = 22,
     ZL = 23,
 }
-class PadButton implements Byteable {
+export class PadButton implements Byteable {
     private btns = new Uint8Array(3)
     toBytes () {
         return this.btns
@@ -78,7 +78,7 @@ class PadButton implements Byteable {
         btns.fill(0)        
     }
 }
-class AnalogStick implements Byteable {
+export class AnalogStick implements Byteable {
     protected _x = 0.5
     protected _y = 0.5
     constructor () {
@@ -117,7 +117,7 @@ class AnalogStick implements Byteable {
         return new Uint8Array(data)
     }
 }
-class Motion implements Byteable {
+export class Motion implements Byteable {
     offsetX = 0
     offsetY = 0
     toBytes () {
