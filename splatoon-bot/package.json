@@ -13,6 +13,7 @@
     "start": "ts-node src/index.ts",
     "cli": "ts-node src/cli.ts",
     "build": "tsc -p .",
+    "watch": "tsc -w -p .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

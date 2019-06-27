@@ -63,7 +63,7 @@ async function main (...argv: string[]) {
         params = params.map(i => i.trim())
         if (StrBtnKeys.includes(cmd)) {
             const key = StrBtnMap[cmd]
-            await press(key)
+            await press(key, parseInt(params[0]))
         } else {
             switch (cmd) {
                 case 'ctl':
@@ -75,6 +75,12 @@ async function main (...argv: string[]) {
                     ])
                     await delay(1000)
                     await press(ButtonBitMap.A)
+                    break
+                case 'zlr':
+                    await Promise.all([
+                        press(ButtonBitMap.ZL),
+                        press(ButtonBitMap.ZR),
+                    ])
                     break
                 case 'sleep': {
                     const ms = parseInt(params[0])
@@ -104,6 +110,24 @@ async function main (...argv: string[]) {
                 case 'end':
                     console.log('end')
                     process.exit(0)
+                    break
+                case 'autoa':
+                    for (let i = 0; i < 60; i++) {
+                        await Promise.all([
+                            press(ButtonBitMap.ZL),
+                            press(ButtonBitMap.ZR),
+                        ])
+                        await press(ButtonBitMap.A, 100)
+                        await delay(300)
+                    }
+                    break
+                case 'lan':
+                    await Promise.all([
+                        press(ButtonBitMap.L, 5000),
+                        press(ButtonBitMap.R, 5000),
+                        press(ButtonBitMap.LStick, 5000),
+                    ])
+                    break
             }
         }
         console.log(line)
