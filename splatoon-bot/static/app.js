@@ -22,10 +22,18 @@ class App {
         if (dat.cmd === 'capture') {
             const video = document.querySelector('video')
             const canvas = document.querySelector('canvas')
-            canvas.width = video.videoWidth
-            canvas.height = video.videoHeight
+            let cw = 0, ch = 0
+            if (dat.size) {
+                cw = dat.size.w
+                ch = dat.size.h
+            } else {
+                cw = video.videoWidth
+                ch = video.videoHeight
+            }
+            canvas.width = cw
+            canvas.height = ch
             const ctx = canvas.getContext('2d')
-            ctx.drawImage(video, 0, 0)
+            ctx.drawImage(video, 0, 0, cw, ch)
             canvas.toBlob(async (blob) => {
                 const ab = await new Response(blob).arrayBuffer()
                 this.ws.send(ab)

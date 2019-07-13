@@ -4,8 +4,12 @@ import { parse } from 'url'
 import { createReadStream } from 'fs'
 import { normalize, join } from 'path'
 
+interface Size {
+    w: number
+    h: number
+}
 export interface Capturer {
-    getCapture (timeout: number): Promise<Buffer>
+    getCapture (timeout: number, size?: Size): Promise<Buffer>
 }
 
 const SizeLimit = 10 * 1024 * 1024 // 10MB
@@ -57,7 +61,6 @@ export class ChromeCapturer implements Capturer {
             }
             this.conn = conn
             conn.on('message', data => {
-                console.log(data)
                 if (this.resolver) this.resolver(data.binaryData)
             })
         })
@@ -65,11 +68,11 @@ export class ChromeCapturer implements Capturer {
             console.log(`listening at ${port}`)
         })
     }
-    async getCapture (timeout: number): Promise<Buffer> {
+    async getCapture (timeout: number, size?: Size): Promise<Buffer> {
         if (!this.conn) {
             throw new Error('not ready')
         }
-        this.conn.send(JSON.stringify({ cmd: 'capture' }))
+        this.conn.send(JSON.stringify({ cmd: 'capture', size }))
         return new Promise((res, rej) => {
             this.resolver = res
             setTimeout(() => rej(new Error('timeout')), timeout)

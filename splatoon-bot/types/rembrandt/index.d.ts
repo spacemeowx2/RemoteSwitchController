@@ -1,7 +1,7 @@
 declare module "rembrandt" {
   import { Image, ImageData, Canvas } from 'canvas'
   class RembrandtImage {
-    static fromImage (image: Image): RembrandtImage
+    static fromImage (image: Image | Canvas): RembrandtImage
     static fromBuffer (buffer: Buffer): RembrandtImage
     constructor (width: number, height: number, image?: Image | null)
     readonly canvas: Canvas
