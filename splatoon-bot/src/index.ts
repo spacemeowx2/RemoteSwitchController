@@ -10,9 +10,9 @@ async function main (...argv: string[]) {
         console.error(`npm start UDPServer:Port`)
         return
     }
-    const c = new ProController(new ProUDPTransport(argv[0]))
+    const controller = new ProController(new ProUDPTransport(argv[0]))
     const capturer = new ChromeCapturer()
-    const bot = new SplatoonBot(c, capturer)
+    const bot = new SplatoonBot(controller, capturer)
     await bot.run()
 }
 main(...process.argv.slice(2)).catch(e => console.error(e))
