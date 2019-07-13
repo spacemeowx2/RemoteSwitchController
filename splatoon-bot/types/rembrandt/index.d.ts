@@ -6,6 +6,8 @@ declare module "rembrandt" {
     constructor (width: number, height: number, image?: Image | null)
     readonly canvas: Canvas
     readonly imageData: ImageData
+    readonly width: number
+    readonly height: number
     toBuffer (): Buffer
     persist(): void
     clone(): RembrandtImage
@@ -28,7 +30,7 @@ declare module "rembrandt" {
     THRESHOLD_PERCENT = 0,
     THRESHOLD_PIXELS = 1
   }
-  export type ImageType = Buffer
+  export type ImageType = Buffer | string | RembrandtImage
   export interface Config {
     imageA: ImageType,
     imageB: ImageType,
@@ -39,14 +41,21 @@ declare module "rembrandt" {
     compositionMaskColor?: RembrandtColor,
     maxOffset?: number
   }
+  export interface CompareResult {
+    differences: number
+    percentageDifference: number
+    threshold: number
+    passed: boolean
+    compositionImage?: Image
+  }
   export default class Rembrandt {
     static THRESHOLD_PERCENT: ThresholdType
     static THRESHOLD_PIXELS: ThresholdType
-    static Color: RembrandtColor
-    static RembrandtImage: RembrandtImage
+    static Color: typeof RembrandtColor
+    static Image: typeof RembrandtImage
     static version: string
     static createImage (width: number, height: number): RembrandtImage
-
-    compare(): Promise<void>
+    constructor (opts: Config)
+    compare(): Promise<CompareResult>
   }
 }
