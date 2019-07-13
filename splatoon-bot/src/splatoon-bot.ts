@@ -26,6 +26,8 @@ enum Scenes {
     InGame = 'InGame',
     InGameError = 'InGameError',
     SearchFailed = 'SearchFailed',
+    SelectPrivateConfig = 'SelectPrivateConfig',
+    FatalError = 'FatalError'
 }
 
 export class SplatoonBot {
@@ -54,6 +56,7 @@ export class SplatoonBot {
                 break
             case Scenes.Home:
             case Scenes.SelectUser:
+            case Scenes.FatalError:
                 await this.press(ButtonBitMap.A)
                 break
             case Scenes.TitleScreen:
@@ -66,7 +69,7 @@ export class SplatoonBot {
                 await this.press(ButtonBitMap.Down, 100)
                 await delay(500)
                 await this.press(ButtonBitMap.A, 100)
-                await delay(5000)
+                await delay(10000)
                 await this.press(ButtonBitMap.A, 100)
                 break
             case Scenes.Shoal:
@@ -102,6 +105,15 @@ export class SplatoonBot {
                 await this.press(ButtonBitMap.A, 100)
                 await delay(3000)
                 break
+            case Scenes.SelectPrivateConfig:
+                await this.press(ButtonBitMap.Left)
+                await this.press(ButtonBitMap.A)
+                await delay(1000)
+                break
+            case Scenes.SearchFailed:
+                await this.press(ButtonBitMap.B, 100)
+                await this.press(ButtonBitMap.A, 100)
+                break
             case Scenes.InGame:
                 await this.press(ButtonBitMap.Y, 50)
                 c.leftStick.y = 1
@@ -113,7 +125,7 @@ export class SplatoonBot {
                 for (let i = 0; i < 10; i++) {
                     await this.press(ButtonBitMap.R, 50)
                     await this.press(ButtonBitMap.RStick, 50)
-                    await delay(3000)
+                    await delay(1000)
                 }
 
                 c.button.setKey(ButtonBitMap.ZL, false)
@@ -134,7 +146,16 @@ export class SplatoonBot {
                 break
         }
     }
+    private async reset () {
+        await this.press(ButtonBitMap.Home, 100)
+        await delay(500)
+        await this.press(ButtonBitMap.X, 100)
+        await delay(500)
+        await this.press(ButtonBitMap.A, 100)
+        await delay(500)
+    }
     async run () {
+        let noneCount = 0
         while (1) {
             await delay(1000)
             try {
@@ -144,7 +165,16 @@ export class SplatoonBot {
                 if (tops[0].score <= NoneThreshold) {
                     scene = tops[0].scene
                 }
-                console.log(tops, scene)
+                console.log(tops.slice(0, 3), scene)
+                if (scene === Scenes.None) {
+                    noneCount++
+                } else {
+                    noneCount = 0
+                }
+                if (noneCount > 10) {
+                    await this.reset()
+                    noneCount = 0
+                }
                 await this.doScene(scene)
             } catch (e) {
                 console.error(e)
