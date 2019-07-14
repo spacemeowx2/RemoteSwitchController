@@ -116,32 +116,34 @@ export class SplatoonBot {
                 break
             case Scenes.InGame:
                 await this.press(ButtonBitMap.Y, 50)
+                await delay(100)
+                await this.press(ButtonBitMap.R, 50)
                 c.leftStick.y = 1
                 c.send()
-                await delay(5000)
-
                 c.button.setKey(ButtonBitMap.ZL, true)
-                
+                await delay(3000)
+
                 for (let i = 0; i < 10; i++) {
                     await this.press(ButtonBitMap.R, 50)
+                    await delay(100)
                     await this.press(ButtonBitMap.RStick, 50)
-                    await delay(1000)
+                    await delay(900)
                 }
 
                 c.button.setKey(ButtonBitMap.ZL, false)
                 c.leftStick.y = 0.5
                 c.send()
 
-                c.button.setKey(ButtonBitMap.X, true)
-                c.send()
-                await delay(50)
-                c.button.setKey(ButtonBitMap.Down, true)
-                c.send()
-                await delay(50)
-                await this.press(ButtonBitMap.A, 50)
-                c.button.setKey(ButtonBitMap.X, false)
-                c.button.setKey(ButtonBitMap.Down, false)
-                c.send()
+                // c.button.setKey(ButtonBitMap.X, true)
+                // c.send()
+                // await delay(50)
+                // c.button.setKey(ButtonBitMap.Down, true)
+                // c.send()
+                // await delay(50)
+                // await this.press(ButtonBitMap.A, 50)
+                // c.button.setKey(ButtonBitMap.X, false)
+                // c.button.setKey(ButtonBitMap.Down, false)
+                // c.send()
 
                 break
         }
