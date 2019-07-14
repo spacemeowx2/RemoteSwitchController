@@ -27,7 +27,8 @@ enum Scenes {
     InGameError = 'InGameError',
     SearchFailed = 'SearchFailed',
     SelectPrivateConfig = 'SelectPrivateConfig',
-    FatalError = 'FatalError'
+    FatalError = 'FatalError',
+    Square = 'Square',
 }
 
 export class SplatoonBot {
@@ -62,6 +63,7 @@ export class SplatoonBot {
             case Scenes.TitleScreen:
                 await Promise.all([this.press(ButtonBitMap.ZL), this.press(ButtonBitMap.ZR)])
                 await delay(5000)
+            case Scenes.Square:
                 await this.press(ButtonBitMap.X)
                 await delay(500)
                 await this.press(ButtonBitMap.Down, 100)
@@ -81,11 +83,10 @@ export class SplatoonBot {
                 await this.press(ButtonBitMap.A)
                 await delay(500)
                 await this.press(ButtonBitMap.A)
-                await delay(5000)
+                await delay(10000)
+                await this.press(ButtonBitMap.Right, 100)
                 break
             case Scenes.WaitPlayer:
-                await this.press(ButtonBitMap.Right, 100)
-                await delay(1000)
                 await this.press(ButtonBitMap.Down)
                 await this.press(ButtonBitMap.Down)
                 await this.press(ButtonBitMap.A)
