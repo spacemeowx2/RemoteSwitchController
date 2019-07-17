@@ -21,6 +21,10 @@ declare module "rembrandt" {
     static WHITE: RembrandtColor
     static BLACK: RembrandtColor
     static RED: RembrandtColor
+    r: number
+    g: number
+    b: number
+    a: number
     constructor (r: number, g: number, b: number, a?: number)
     clone(): RembrandtColor
     equals(color: RembrandtColor): boolean
