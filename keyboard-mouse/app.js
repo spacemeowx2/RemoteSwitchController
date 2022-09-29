@@ -41,7 +41,7 @@ class AnalogStick {
         const x = Math.ceil(this.x * 4095)
         const y = Math.ceil(this.y * 4095)
 
-        const data = [x & 0xFF, ((y & 0xF) << 8) | ((x >> 8) & 0xF), y >> 4]
+        const data = [x & 0xFF, ((y & 0xF) << 4) | ((x >> 8) & 0xF), y >> 4]
 
         return data
     }
